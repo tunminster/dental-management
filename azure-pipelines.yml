@@ -4,10 +4,12 @@ trigger:
 - develop
 
 variables:
-  imageRepository: 'dental-management-dashboard'
-  containerRegistry: 'your-acr.azurecr.io'
+  buildConfiguration: 'Release'
+  tag: '$(Build.BuildNumber)'
+  imageRepository: 'dental-dashboard-app'
+  containerRegistry: 'containerRegistry'
   dockerfilePath: '$(Build.SourcesDirectory)/Dockerfile'
-  tag: '$(Build.BuildId)'
+  
 
 stages:
 - stage: Build
@@ -33,6 +35,15 @@ stages:
   displayName: Deploy to AKS
   dependsOn: Build
   condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+
+  variables:
+    - group: bytheapp-demo
+    - name: repository-image
+      value: 'bytheapp.azurecr.io/dental-dashboard-app:$(Build.BuildNumber)'
+    - name: acr-secret-name
+      value: 'by-the-app-acr-secret'
+
+  
   jobs:
   - deployment: Deploy
     displayName: Deploy to AKS
