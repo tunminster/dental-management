@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { Plus, Search, Filter, User, Phone, Mail, Calendar, Edit, Trash2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Plus, Search, Filter, User, Phone, Mail, Calendar, Edit, Trash2, Loader, AlertCircle } from 'lucide-react'
+import { patientsAPI } from '../services/api'
 
 const patients = [
   {
@@ -55,9 +56,61 @@ const patients = [
 ]
 
 export default function Patients() {
+  const [patients, setPatients] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showAddForm, setShowAddForm] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    loadPatients()
+  }, [])
+
+  const loadPatients = async () => {
+    try {
+      setLoading(true)
+      const response = await patientsAPI.getAll()
+      setPatients(response.data || response)
+    } catch (error) {
+      setError(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleAddPatient = async (patientData) => {
+    try {
+      setSubmitting(true)
+      const response = await patientsAPI.create(patientData)
+      setPatients(prev => [...prev, response])
+      setShowAddForm(false)
+      setError('')
+    } catch (error) {
+      setError(error.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleUpdatePatient = async (id, patientData) => {
+    try {
+      const response = await patientsAPI.update(id, patientData)
+      setPatients(prev => prev.map(patient => patient.id === id ? response : patient))
+    } catch (error) {
+      setError(error.message)
+    }
+  }
+
+  const handleDeletePatient = async (id) => {
+    try {
+      await patientsAPI.delete(id)
+      setPatients(prev => prev.filter(patient => patient.id !== id))
+    } catch (error) {
+      setError(error.message)
+    }
+  }
 
   const filteredPatients = patients.filter(patient => {
     const matchesSearch = patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -66,6 +119,17 @@ export default function Patients() {
     const matchesStatus = statusFilter === 'all' || patient.status === statusFilter
     return matchesSearch && matchesStatus
   })
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <Loader className="h-8 w-8 text-primary-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading patients...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -82,6 +146,19 @@ export default function Patients() {
           New Patient
         </button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 text-red-500" />
+          <span className="text-red-700 text-sm">{error}</span>
+          <button
+            onClick={() => setError('')}
+            className="ml-auto text-red-500 hover:text-red-700"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="card">
@@ -215,33 +292,66 @@ export default function Patients() {
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Add New Patient</h3>
-            <form className="space-y-4">
+            <form className="space-y-4" onSubmit={(e) => {
+              e.preventDefault()
+              const formData = new FormData(e.target)
+              const patientData = {
+                name: formData.get('name'),
+                email: formData.get('email'),
+                phone: formData.get('phone'),
+                dateOfBirth: formData.get('dateOfBirth'),
+                address: formData.get('address'),
+                emergencyContact: formData.get('emergencyContact'),
+                medicalHistory: formData.get('medicalHistory')
+              }
+              handleAddPatient(patientData)
+            }}>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                <input type="text" className="input-field" placeholder="Enter patient name" />
+                <input type="text" name="name" required className="input-field" placeholder="Enter patient name" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input type="email" className="input-field" placeholder="Enter email address" />
+                <input type="email" name="email" required className="input-field" placeholder="Enter email address" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
-                <input type="tel" className="input-field" placeholder="Enter phone number" />
+                <input type="tel" name="phone" required className="input-field" placeholder="Enter phone number" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
-                <input type="date" className="input-field" />
+                <input type="date" name="dateOfBirth" required className="input-field" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                <textarea name="address" className="input-field" rows="2" placeholder="Enter address"></textarea>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact</label>
+                <input type="text" name="emergencyContact" className="input-field" placeholder="Emergency contact name and phone" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Medical History</label>
+                <textarea name="medicalHistory" className="input-field" rows="3" placeholder="Medical history notes"></textarea>
               </div>
               <div className="flex justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setShowAddForm(false)}
                   className="btn-secondary"
+                  disabled={submitting}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary">
-                  Add Patient
+                <button type="submit" className="btn-primary" disabled={submitting}>
+                  {submitting ? (
+                    <>
+                      <Loader className="h-4 w-4 animate-spin mr-2" />
+                      Adding...
+                    </>
+                  ) : (
+                    'Add Patient'
+                  )}
                 </button>
               </div>
             </form>

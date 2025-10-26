@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { Plus, Search, Filter, User, Phone, Mail, Calendar, Edit, Trash2, Clock, Award } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Plus, Search, Filter, User, Phone, Mail, Calendar, Edit, Trash2, Clock, Award, Loader, AlertCircle } from 'lucide-react'
+import { dentistsAPI } from '../services/api'
 
 const dentists = [
   {
@@ -92,11 +93,64 @@ const specializations = [
 ]
 
 export default function Dentists() {
+  const [dentists, setDentists] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [specializationFilter, setSpecializationFilter] = useState('all')
   const [showAddForm, setShowAddForm] = useState(false)
   const [selectedDentist, setSelectedDentist] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    loadDentists()
+  }, [])
+
+  const loadDentists = async () => {
+    try {
+      setLoading(true)
+      const response = await dentistsAPI.getAll()
+      setDentists(response.data || response)
+    } catch (error) {
+      setError(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleAddDentist = async (dentistData) => {
+    try {
+      setSubmitting(true)
+      const response = await dentistsAPI.create(dentistData)
+      setDentists(prev => [...prev, response])
+      setShowAddForm(false)
+      setError('')
+    } catch (error) {
+      setError(error.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleUpdateDentist = async (id, dentistData) => {
+    try {
+      const response = await dentistsAPI.update(id, dentistData)
+      setDentists(prev => prev.map(dentist => dentist.id === id ? response : dentist))
+      setSelectedDentist(null)
+    } catch (error) {
+      setError(error.message)
+    }
+  }
+
+  const handleDeleteDentist = async (id) => {
+    try {
+      await dentistsAPI.delete(id)
+      setDentists(prev => prev.filter(dentist => dentist.id !== id))
+    } catch (error) {
+      setError(error.message)
+    }
+  }
 
   const filteredDentists = dentists.filter(dentist => {
     const matchesSearch = dentist.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -110,6 +164,17 @@ export default function Dentists() {
   const getWorkingDays = (workingHours) => {
     const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
     return days.filter(day => workingHours[day].start !== '00:00').length
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <Loader className="h-8 w-8 text-primary-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading dentists...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -127,6 +192,19 @@ export default function Dentists() {
           Add Dentist
         </button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 text-red-500" />
+          <span className="text-red-700 text-sm">{error}</span>
+          <button
+            onClick={() => setError('')}
+            className="ml-auto text-red-500 hover:text-red-700"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="card">

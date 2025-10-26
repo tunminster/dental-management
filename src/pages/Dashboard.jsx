@@ -1,4 +1,6 @@
-import { Calendar, Users, Clock, TrendingUp } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Calendar, Users, Clock, TrendingUp, Loader, AlertCircle } from 'lucide-react'
+import { dashboardAPI } from '../services/api'
 
 const stats = [
   { name: 'Today\'s Appointments', value: '12', icon: Calendar, change: '+2', changeType: 'positive' },
@@ -15,6 +17,64 @@ const recentAppointments = [
 ]
 
 export default function Dashboard() {
+  const [stats, setStats] = useState([])
+  const [recentAppointments, setRecentAppointments] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    loadDashboardData()
+  }, [])
+
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true)
+      const [statsResponse, appointmentsResponse] = await Promise.all([
+        dashboardAPI.getStats(),
+        dashboardAPI.getTodayAppointments()
+      ])
+      
+      setStats(statsResponse.data || statsResponse)
+      setRecentAppointments(appointmentsResponse.data || appointmentsResponse)
+    } catch (error) {
+      setError(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <Loader className="h-8 w-8 text-primary-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-600">Welcome back! Here's what's happening at your dental practice.</p>
+        </div>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 text-red-500" />
+          <span className="text-red-700 text-sm">{error}</span>
+          <button
+            onClick={loadDashboardData}
+            className="ml-auto btn-primary"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -59,12 +119,12 @@ export default function Dashboard() {
                   <div className="flex-shrink-0">
                     <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center">
                       <span className="text-sm font-medium text-primary-600">
-                        {appointment.patient.split(' ').map(n => n[0]).join('')}
+                        {appointment.patientName?.split(' ').map(n => n[0]).join('') || 'P'}
                       </span>
                     </div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{appointment.patient}</p>
+                    <p className="text-sm font-medium text-gray-900 truncate">{appointment.patientName}</p>
                     <p className="text-sm text-gray-500">{appointment.treatment}</p>
                   </div>
                   <div className="flex-shrink-0 text-sm text-gray-500">{appointment.time}</div>

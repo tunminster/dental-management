@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
+import { authAPI, usersAPI } from '../services/api'
 
 const AuthContext = createContext()
 
@@ -47,79 +48,117 @@ const mockUsers = [
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [users, setUsers] = useState(mockUsers)
+  const [users, setUsers] = useState([])
 
   useEffect(() => {
     // Check if user is logged in (from localStorage)
     const savedUser = localStorage.getItem('dental_user')
-    if (savedUser) {
+    const savedToken = localStorage.getItem('authToken')
+    
+    if (savedUser && savedToken) {
       setUser(JSON.parse(savedUser))
+      // Verify token is still valid
+      verifyToken()
+    } else {
+      setLoading(false)
     }
-    setLoading(false)
   }, [])
+
+  const verifyToken = async () => {
+    try {
+      const profile = await authAPI.getProfile()
+      setUser(profile)
+      localStorage.setItem('dental_user', JSON.stringify(profile))
+    } catch (error) {
+      // Token is invalid, clear everything
+      localStorage.removeItem('authToken')
+      localStorage.removeItem('dental_user')
+      setUser(null)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const login = async (username, password) => {
     setLoading(true)
     
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
-    // Find user in mock data
-    const foundUser = users.find(u => 
-      (u.username === username || u.email === username) && 
-      u.password === password && 
-      u.isActive
-    )
-    
-    if (foundUser) {
-      const userData = { ...foundUser }
-      delete userData.password // Don't store password in state
+    try {
+      const response = await authAPI.login({ username, password })
+      const { token, user: userData } = response
+      
+      // Store token and user data
+      localStorage.setItem('authToken', token)
+      localStorage.setItem('dental_user', JSON.stringify(userData))
       
       setUser(userData)
-      localStorage.setItem('dental_user', JSON.stringify(userData))
       setLoading(false)
       return { success: true, user: userData }
-    } else {
+    } catch (error) {
       setLoading(false)
-      return { success: false, error: 'Invalid credentials' }
+      return { success: false, error: error.message }
     }
   }
 
-  const logout = () => {
-    setUser(null)
-    localStorage.removeItem('dental_user')
-  }
-
-  const updateUser = (updatedUser) => {
-    setUsers(prevUsers => 
-      prevUsers.map(u => u.id === updatedUser.id ? updatedUser : u)
-    )
-    
-    if (user && user.id === updatedUser.id) {
-      const userData = { ...updatedUser }
-      delete userData.password
-      setUser(userData)
-      localStorage.setItem('dental_user', JSON.stringify(userData))
+  const logout = async () => {
+    try {
+      await authAPI.logout()
+    } catch (error) {
+      console.error('Logout error:', error)
+    } finally {
+      setUser(null)
+      localStorage.removeItem('authToken')
+      localStorage.removeItem('dental_user')
     }
   }
 
-  const addUser = (newUser) => {
-    const userWithId = {
-      ...newUser,
-      id: Math.max(...users.map(u => u.id)) + 1,
-      isActive: true,
-      lastLogin: null
+  const loadUsers = async () => {
+    try {
+      const response = await usersAPI.getAll()
+      setUsers(response.data || response)
+    } catch (error) {
+      console.error('Failed to load users:', error)
+      setUsers([])
     }
-    setUsers(prevUsers => [...prevUsers, userWithId])
-    return userWithId
   }
 
-  const deleteUser = (userId) => {
-    setUsers(prevUsers => prevUsers.filter(u => u.id !== userId))
-    
-    // If current user is deleted, logout
-    if (user && user.id === userId) {
-      logout()
+  const updateUser = async (updatedUser) => {
+    try {
+      const response = await usersAPI.update(updatedUser.id, updatedUser)
+      setUsers(prevUsers => 
+        prevUsers.map(u => u.id === updatedUser.id ? response : u)
+      )
+      
+      if (user && user.id === updatedUser.id) {
+        setUser(response)
+        localStorage.setItem('dental_user', JSON.stringify(response))
+      }
+      return response
+    } catch (error) {
+      throw new Error(error.message)
+    }
+  }
+
+  const addUser = async (newUser) => {
+    try {
+      const response = await usersAPI.create(newUser)
+      setUsers(prevUsers => [...prevUsers, response])
+      return response
+    } catch (error) {
+      throw new Error(error.message)
+    }
+  }
+
+  const deleteUser = async (userId) => {
+    try {
+      await usersAPI.delete(userId)
+      setUsers(prevUsers => prevUsers.filter(u => u.id !== userId))
+      
+      // If current user is deleted, logout
+      if (user && user.id === userId) {
+        logout()
+      }
+    } catch (error) {
+      throw new Error(error.message)
     }
   }
 
@@ -145,6 +184,7 @@ export const AuthProvider = ({ children }) => {
     addUser,
     deleteUser,
     hasPermission,
+    loadUsers,
     loading
   }
 

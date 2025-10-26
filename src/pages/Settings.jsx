@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { Save, User, Bell, Shield, Database } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Save, User, Bell, Shield, Database, Loader, AlertCircle } from 'lucide-react'
+import { settingsAPI } from '../services/api'
 
 export default function Settings() {
   const [settings, setSettings] = useState({
@@ -39,12 +40,36 @@ export default function Settings() {
     alert('Settings saved successfully!')
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <Loader className="h-8 w-8 text-primary-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading settings...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
         <p className="text-gray-600">Manage your practice settings and preferences</p>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 text-red-500" />
+          <span className="text-red-700 text-sm">{error}</span>
+          <button
+            onClick={() => setError('')}
+            className="ml-auto text-red-500 hover:text-red-700"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Settings Navigation */}
