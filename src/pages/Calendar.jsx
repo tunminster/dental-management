@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { ChevronLeft, ChevronRight, Plus, Clock, User } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { ChevronLeft, ChevronRight, Plus, Clock, User, Loader, AlertCircle } from 'lucide-react'
+import { calendarAPI } from '../services/api'
 
 const currentDate = new Date()
 const currentMonth = currentDate.getMonth()
@@ -21,9 +22,32 @@ const appointments = [
 ]
 
 export default function Calendar() {
+  const [appointments, setAppointments] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [selectedMonth, setSelectedMonth] = useState(currentMonth)
   const [selectedYear, setSelectedYear] = useState(currentYear)
   const [selectedDate, setSelectedDate] = useState(null)
+
+  useEffect(() => {
+    loadAppointments()
+  }, [selectedMonth, selectedYear])
+
+  const loadAppointments = async () => {
+    try {
+      setLoading(true)
+      const params = {
+        month: selectedMonth + 1,
+        year: selectedYear
+      }
+      const response = await calendarAPI.getAppointments(params)
+      setAppointments(response.data || response)
+    } catch (error) {
+      setError(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const getDaysInMonth = (month, year) => {
     return new Date(year, month + 1, 0).getDate()
@@ -70,6 +94,17 @@ export default function Calendar() {
     days.push(day)
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <Loader className="h-8 w-8 text-primary-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading calendar...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -82,6 +117,19 @@ export default function Calendar() {
           New Appointment
         </button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 text-red-500" />
+          <span className="text-red-700 text-sm">{error}</span>
+          <button
+            onClick={loadAppointments}
+            className="ml-auto btn-primary"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Calendar */}

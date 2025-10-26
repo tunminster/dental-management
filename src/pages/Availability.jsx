@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { Calendar, Clock, User, Plus, Edit, Trash2, Save, X } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Calendar, Clock, User, Plus, Edit, Trash2, Save, X, Loader, AlertCircle } from 'lucide-react'
+import { availabilityAPI, dentistsAPI } from '../services/api'
 
 const dentists = [
   { id: 1, name: 'Dr. Sarah Johnson', specialization: 'General Dentistry' },
@@ -55,10 +56,69 @@ const availabilityData = [
 ]
 
 export default function Availability() {
+  const [availabilityData, setAvailabilityData] = useState([])
+  const [dentists, setDentists] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [selectedDentist, setSelectedDentist] = useState('all')
   const [selectedDate, setSelectedDate] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingAvailability, setEditingAvailability] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      const [availabilityResponse, dentistsResponse] = await Promise.all([
+        availabilityAPI.getAll(),
+        dentistsAPI.getAll()
+      ])
+      
+      setAvailabilityData(availabilityResponse.data || availabilityResponse)
+      setDentists(dentistsResponse.data || dentistsResponse)
+    } catch (error) {
+      setError(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleAddAvailability = async (availabilityData) => {
+    try {
+      setSubmitting(true)
+      const response = await availabilityAPI.create(availabilityData)
+      setAvailabilityData(prev => [...prev, response])
+      setShowAddForm(false)
+      setError('')
+    } catch (error) {
+      setError(error.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleUpdateAvailability = async (id, availabilityData) => {
+    try {
+      const response = await availabilityAPI.update(id, availabilityData)
+      setAvailabilityData(prev => prev.map(avail => avail.id === id ? response : avail))
+      setEditingAvailability(null)
+    } catch (error) {
+      setError(error.message)
+    }
+  }
+
+  const handleDeleteAvailability = async (id) => {
+    try {
+      await availabilityAPI.delete(id)
+      setAvailabilityData(prev => prev.filter(avail => avail.id !== id))
+    } catch (error) {
+      setError(error.message)
+    }
+  }
 
   const filteredAvailability = availabilityData.filter(avail => {
     const matchesDentist = selectedDentist === 'all' || avail.dentistId.toString() === selectedDentist
@@ -72,6 +132,17 @@ export default function Availability() {
 
   const getTotalSlots = (timeSlots) => {
     return timeSlots.length
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <Loader className="h-8 w-8 text-primary-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading availability...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -89,6 +160,19 @@ export default function Availability() {
           Add Availability
         </button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 text-red-500" />
+          <span className="text-red-700 text-sm">{error}</span>
+          <button
+            onClick={() => setError('')}
+            className="ml-auto text-red-500 hover:text-red-700"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="card">

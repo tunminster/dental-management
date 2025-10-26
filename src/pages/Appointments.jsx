@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { Plus, Search, Filter, Calendar, Clock, User, Phone } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Plus, Search, Filter, Calendar, Clock, User, Phone, AlertCircle, Loader } from 'lucide-react'
+import { appointmentsAPI, dentistsAPI } from '../services/api'
 
 const dentists = [
   { id: 1, name: 'Dr. Sarah Johnson', specialization: 'General Dentistry' },
@@ -79,19 +80,88 @@ const statusColors = {
 }
 
 export default function Appointments() {
+  const [appointments, setAppointments] = useState([])
+  const [dentists, setDentists] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [dentistFilter, setDentistFilter] = useState('all')
   const [showAddForm, setShowAddForm] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
-  const filteredAppointments = appointments.filter(appointment => {
-    const matchesSearch = appointment.patient.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         appointment.treatment.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         appointment.dentistName.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === 'all' || appointment.status === statusFilter
-    const matchesDentist = dentistFilter === 'all' || appointment.dentistId.toString() === dentistFilter
-    return matchesSearch && matchesStatus && matchesDentist
-  })
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      const [appointmentsResponse, dentistsResponse] = await Promise.all([
+        appointmentsAPI.getAll(),
+        dentistsAPI.getAll()
+      ])
+      
+      setAppointments(appointmentsResponse.data || appointmentsResponse)
+      setDentists(dentistsResponse.data || dentistsResponse)
+    } catch (error) {
+      setError(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleAddAppointment = async (appointmentData) => {
+    try {
+      setSubmitting(true)
+      const response = await appointmentsAPI.create(appointmentData)
+      setAppointments(prev => [...prev, response])
+      setShowAddForm(false)
+      setError('')
+    } catch (error) {
+      setError(error.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleUpdateAppointment = async (id, appointmentData) => {
+    try {
+      const response = await appointmentsAPI.update(id, appointmentData)
+      setAppointments(prev => prev.map(apt => apt.id === id ? response : apt))
+    } catch (error) {
+      setError(error.message)
+    }
+  }
+
+  const handleDeleteAppointment = async (id) => {
+    try {
+      await appointmentsAPI.delete(id)
+      setAppointments(prev => prev.filter(apt => apt.id !== id))
+    } catch (error) {
+      setError(error.message)
+    }
+  }
+
+  const handleStatusUpdate = async (id, status) => {
+    try {
+      const response = await appointmentsAPI.updateStatus(id, status)
+      setAppointments(prev => prev.map(apt => apt.id === id ? response : apt))
+    } catch (error) {
+      setError(error.message)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <Loader className="h-8 w-8 text-primary-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading appointments...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -108,6 +178,19 @@ export default function Appointments() {
           New Appointment
         </button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 text-red-500" />
+          <span className="text-red-700 text-sm">{error}</span>
+          <button
+            onClick={() => setError('')}
+            className="ml-auto text-red-500 hover:text-red-700"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="card">
@@ -222,8 +305,26 @@ export default function Appointments() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex gap-2">
-                      <button className="text-primary-600 hover:text-primary-900">Edit</button>
-                      <button className="text-red-600 hover:text-red-900">Cancel</button>
+                      <button 
+                        onClick={() => handleStatusUpdate(appointment.id, 'confirmed')}
+                        className="text-green-600 hover:text-green-900"
+                        disabled={appointment.status === 'confirmed'}
+                      >
+                        Confirm
+                      </button>
+                      <button 
+                        onClick={() => handleStatusUpdate(appointment.id, 'cancelled')}
+                        className="text-red-600 hover:text-red-900"
+                        disabled={appointment.status === 'cancelled'}
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteAppointment(appointment.id)}
+                        className="text-gray-600 hover:text-gray-900"
+                      >
+                        Delete
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -238,28 +339,43 @@ export default function Appointments() {
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Add New Appointment</h3>
-            <form className="space-y-4">
+            <form className="space-y-4" onSubmit={(e) => {
+              e.preventDefault()
+              const formData = new FormData(e.target)
+              const appointmentData = {
+                patientName: formData.get('patientName'),
+                patientPhone: formData.get('patientPhone'),
+                date: formData.get('date'),
+                time: formData.get('time'),
+                dentistId: parseInt(formData.get('dentistId')),
+                treatment: formData.get('treatment'),
+                notes: formData.get('notes'),
+                status: 'pending'
+              }
+              handleAddAppointment(appointmentData)
+            }}>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Patient Name</label>
-                <input type="text" className="input-field" placeholder="Enter patient name" />
+                <input type="text" name="patientName" required className="input-field" placeholder="Enter patient name" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
-                <input type="tel" className="input-field" placeholder="Enter phone number" />
+                <input type="tel" name="patientPhone" required className="input-field" placeholder="Enter phone number" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                  <input type="date" className="input-field" />
+                  <input type="date" name="date" required className="input-field" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
-                  <input type="time" className="input-field" />
+                  <input type="time" name="time" required className="input-field" />
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Dentist</label>
-                <select className="input-field">
+                <select name="dentistId" required className="input-field">
+                  <option value="">Select a dentist</option>
                   {dentists.map(dentist => (
                     <option key={dentist.id} value={dentist.id}>{dentist.name}</option>
                   ))}
@@ -267,28 +383,37 @@ export default function Appointments() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Treatment</label>
-                <select className="input-field">
-                  <option>Regular Cleaning</option>
-                  <option>Dental Checkup</option>
-                  <option>Cavity Filling</option>
-                  <option>Tooth Extraction</option>
-                  <option>Root Canal</option>
+                <select name="treatment" required className="input-field">
+                  <option value="">Select treatment</option>
+                  <option value="Regular Cleaning">Regular Cleaning</option>
+                  <option value="Dental Checkup">Dental Checkup</option>
+                  <option value="Cavity Filling">Cavity Filling</option>
+                  <option value="Tooth Extraction">Tooth Extraction</option>
+                  <option value="Root Canal">Root Canal</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea className="input-field" rows="3" placeholder="Additional notes"></textarea>
+                <textarea name="notes" className="input-field" rows="3" placeholder="Additional notes"></textarea>
               </div>
               <div className="flex justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setShowAddForm(false)}
                   className="btn-secondary"
+                  disabled={submitting}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary">
-                  Add Appointment
+                <button type="submit" className="btn-primary" disabled={submitting}>
+                  {submitting ? (
+                    <>
+                      <Loader className="h-4 w-4 animate-spin mr-2" />
+                      Adding...
+                    </>
+                  ) : (
+                    'Add Appointment'
+                  )}
                 </button>
               </div>
             </form>

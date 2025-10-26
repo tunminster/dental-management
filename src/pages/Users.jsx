@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { Plus, Search, Filter, User, Mail, Phone, Shield, Edit, Trash2, Eye, EyeOff, CheckCircle, XCircle } from 'lucide-react'
+import { Plus, Search, Filter, User, Mail, Phone, Shield, Edit, Trash2, Eye, EyeOff, CheckCircle, XCircle, Loader, AlertCircle } from 'lucide-react'
 
 const roles = [
   { value: 'admin', label: 'Administrator', color: 'bg-red-100 text-red-800' },
@@ -9,7 +9,9 @@ const roles = [
 ]
 
 export default function Users() {
-  const { users, addUser, updateUser, deleteUser, hasPermission } = useAuth()
+  const { users, addUser, updateUser, deleteUser, hasPermission, loadUsers } = useAuth()
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -17,34 +19,58 @@ export default function Users() {
   const [showEditForm, setShowEditForm] = useState(false)
   const [selectedUser, setSelectedUser] = useState(null)
   const [showPasswords, setShowPasswords] = useState({})
+  const [submitting, setSubmitting] = useState(false)
 
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.username.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesRole = roleFilter === 'all' || user.role === roleFilter
-    const matchesStatus = statusFilter === 'all' || (statusFilter === 'active' ? user.isActive : !user.isActive)
-    return matchesSearch && matchesRole && matchesStatus
-  })
+  useEffect(() => {
+    loadUsersData()
+  }, [])
 
-  const getRoleInfo = (role) => {
-    return roles.find(r => r.value === role) || { label: role, color: 'bg-gray-100 text-gray-800' }
+  const loadUsersData = async () => {
+    try {
+      setLoading(true)
+      await loadUsers()
+    } catch (error) {
+      setError(error.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleAddUser = (userData) => {
-    addUser(userData)
-    setShowAddForm(false)
+  const handleAddUser = async (userData) => {
+    try {
+      setSubmitting(true)
+      await addUser(userData)
+      setShowAddForm(false)
+      setError('')
+    } catch (error) {
+      setError(error.message)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  const handleUpdateUser = (userData) => {
-    updateUser(userData)
-    setShowEditForm(false)
-    setSelectedUser(null)
+  const handleUpdateUser = async (userData) => {
+    try {
+      setSubmitting(true)
+      await updateUser(userData)
+      setShowEditForm(false)
+      setSelectedUser(null)
+      setError('')
+    } catch (error) {
+      setError(error.message)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  const handleDeleteUser = (userId) => {
+  const handleDeleteUser = async (userId) => {
     if (window.confirm('Are you sure you want to delete this user?')) {
-      deleteUser(userId)
+      try {
+        await deleteUser(userId)
+        setError('')
+      } catch (error) {
+        setError(error.message)
+      }
     }
   }
 
@@ -53,6 +79,17 @@ export default function Users() {
       ...prev,
       [userId]: !prev[userId]
     }))
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <Loader className="h-8 w-8 text-primary-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading users...</p>
+        </div>
+      </div>
+    )
   }
 
   if (!hasPermission('all')) {
@@ -82,6 +119,19 @@ export default function Users() {
           Add User
         </button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 text-red-500" />
+          <span className="text-red-700 text-sm">{error}</span>
+          <button
+            onClick={() => setError('')}
+            className="ml-auto text-red-500 hover:text-red-700"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="card">
