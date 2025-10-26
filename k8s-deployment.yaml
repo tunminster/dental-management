@@ -102,10 +102,10 @@ metadata:
 spec:
   tls:
   - hosts:
-    - dental-dashboard.yourdomain.com
+    - #{app-domain}#
     secretName: dental-dashboard-tls
   rules:
-  - host: dental-dashboard.yourdomain.com
+  - host: #{app-domain}#
     http:
       paths:
       - path: /
