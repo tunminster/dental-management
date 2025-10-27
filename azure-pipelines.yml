@@ -109,7 +109,7 @@ stages:
             inputs:
               connectionType: 'Kubernetes Service Connection'
               kubernetesServiceEndpoint: 'by-the-app-cluster'
-              namespace: 'dental-dashboard-prod'
+              namespace: 'by-the-app-prod'
               command: 'apply'
               arguments: '-f $(Build.ArtifactStagingDirectory)/devops/k8s-deployment.yaml'
               secretType: 'dockerRegistry'
