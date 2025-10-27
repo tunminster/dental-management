@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: dental-dashboard
-        image: dental-management-dashboard:latest
+        image: #{repository-image}#
         ports:
         - containerPort: 80
         resources:
