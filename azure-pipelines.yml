@@ -34,7 +34,7 @@ stages:
 - stage: Deploy
   displayName: Deploy to AKS
   dependsOn: Build
-  condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.SourceBranch'], 'refs/heads/master')))
+  condition: and(succeeded(), eq(variables['build.sourceBranch'], 'refs/heads/master'))
 
   variables:
     - group: bytheapp-demo
