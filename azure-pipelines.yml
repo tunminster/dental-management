@@ -49,7 +49,7 @@ stages:
       - name: env-name
         value: 'Production'
       - name: env-namespace
-        value: 'dental-dashboard-prod'
+        value: 'by-the-app-prod'
       - name: SKIP_PREFLIGHT_CHECK
         value: true
     jobs:
