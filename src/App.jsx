@@ -32,6 +32,15 @@ function App() {
             <Route path="users" element={<ProtectedRoute permission="all"><Users /></ProtectedRoute>} />
             <Route path="settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           </Route>
+          {/* Catch-all route for debugging */}
+          <Route path="*" element={
+            <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
+              <h1>404 - Page Not Found</h1>
+              <p>Current URL: {window.location.pathname}</p>
+              <p>This might be a routing issue. Check the browser console for errors.</p>
+              <a href="/" style={{ color: 'blue' }}>Go to Dashboard</a>
+            </div>
+          } />
         </Routes>
       </Router>
     </AuthProvider>

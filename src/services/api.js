@@ -75,7 +75,7 @@ export const authAPI = {
 
   getProfile: async () => {
     try {
-      const response = await apiClient.get('/auth/profile')
+      const response = await apiClient.get('/auth/me')
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to get profile')
@@ -96,7 +96,7 @@ export const authAPI = {
 export const appointmentsAPI = {
   getAll: async (params = {}) => {
     try {
-      const response = await apiClient.get('/appointments', { params })
+      const response = await apiClient.get('/api/appointments', { params })
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch appointments')
@@ -105,7 +105,7 @@ export const appointmentsAPI = {
 
   getById: async (id) => {
     try {
-      const response = await apiClient.get(`/appointments/${id}`)
+      const response = await apiClient.get(`/api/appointments/${id}`)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch appointment')
@@ -114,7 +114,7 @@ export const appointmentsAPI = {
 
   create: async (appointmentData) => {
     try {
-      const response = await apiClient.post('/appointments', appointmentData)
+      const response = await apiClient.post('/api/appointments', appointmentData)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to create appointment')
@@ -123,7 +123,7 @@ export const appointmentsAPI = {
 
   update: async (id, appointmentData) => {
     try {
-      const response = await apiClient.put(`/appointments/${id}`, appointmentData)
+      const response = await apiClient.put(`/api/appointments/${id}`, appointmentData)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to update appointment')
@@ -132,7 +132,7 @@ export const appointmentsAPI = {
 
   delete: async (id) => {
     try {
-      const response = await apiClient.delete(`/appointments/${id}`)
+      const response = await apiClient.delete(`/api/appointments/${id}`)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to delete appointment')
@@ -141,7 +141,7 @@ export const appointmentsAPI = {
 
   updateStatus: async (id, status) => {
     try {
-      const response = await apiClient.patch(`/appointments/${id}/status`, { status })
+      const response = await apiClient.patch(`/api/appointments/${id}/status`, { status })
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to update appointment status')
@@ -153,7 +153,7 @@ export const appointmentsAPI = {
 export const patientsAPI = {
   getAll: async (params = {}) => {
     try {
-      const response = await apiClient.get('/patients', { params })
+      const response = await apiClient.get('/api/patients', { params })
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch patients')
@@ -162,7 +162,7 @@ export const patientsAPI = {
 
   getById: async (id) => {
     try {
-      const response = await apiClient.get(`/patients/${id}`)
+      const response = await apiClient.get(`/api/patients/${id}`)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch patient')
@@ -171,7 +171,7 @@ export const patientsAPI = {
 
   create: async (patientData) => {
     try {
-      const response = await apiClient.post('/patients', patientData)
+      const response = await apiClient.post('/api/patients', patientData)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to create patient')
@@ -180,7 +180,7 @@ export const patientsAPI = {
 
   update: async (id, patientData) => {
     try {
-      const response = await apiClient.put(`/patients/${id}`, patientData)
+      const response = await apiClient.put(`/api/patients/${id}`, patientData)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to update patient')
@@ -189,7 +189,7 @@ export const patientsAPI = {
 
   delete: async (id) => {
     try {
-      const response = await apiClient.delete(`/patients/${id}`)
+      const response = await apiClient.delete(`/api/patients/${id}`)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to delete patient')
@@ -198,7 +198,7 @@ export const patientsAPI = {
 
   getAppointments: async (patientId) => {
     try {
-      const response = await apiClient.get(`/patients/${patientId}/appointments`)
+      const response = await apiClient.get(`/api/patients/${patientId}/appointments`)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch patient appointments')
@@ -210,7 +210,7 @@ export const patientsAPI = {
 export const dentistsAPI = {
   getAll: async (params = {}) => {
     try {
-      const response = await apiClient.get('/dentists', { params })
+      const response = await apiClient.get('/api/dentists', { params })
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch dentists')
@@ -219,7 +219,7 @@ export const dentistsAPI = {
 
   getById: async (id) => {
     try {
-      const response = await apiClient.get(`/dentists/${id}`)
+      const response = await apiClient.get(`/api/dentists/${id}`)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch dentist')
@@ -228,7 +228,7 @@ export const dentistsAPI = {
 
   create: async (dentistData) => {
     try {
-      const response = await apiClient.post('/dentists', dentistData)
+      const response = await apiClient.post('/api/dentists', dentistData)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to create dentist')
@@ -237,7 +237,7 @@ export const dentistsAPI = {
 
   update: async (id, dentistData) => {
     try {
-      const response = await apiClient.put(`/dentists/${id}`, dentistData)
+      const response = await apiClient.put(`/api/dentists/${id}`, dentistData)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to update dentist')
@@ -246,7 +246,7 @@ export const dentistsAPI = {
 
   delete: async (id) => {
     try {
-      const response = await apiClient.delete(`/dentists/${id}`)
+      const response = await apiClient.delete(`/api/dentists/${id}`)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to delete dentist')
@@ -255,7 +255,7 @@ export const dentistsAPI = {
 
   getAppointments: async (dentistId, params = {}) => {
     try {
-      const response = await apiClient.get(`/dentists/${dentistId}/appointments`, { params })
+      const response = await apiClient.get(`/api/dentists/${dentistId}/appointments`, { params })
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch dentist appointments')
@@ -267,7 +267,7 @@ export const dentistsAPI = {
 export const availabilityAPI = {
   getAll: async (params = {}) => {
     try {
-      const response = await apiClient.get('/availability', { params })
+      const response = await apiClient.get('/api/availability', { params })
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch availability')
@@ -276,7 +276,7 @@ export const availabilityAPI = {
 
   getByDentist: async (dentistId, params = {}) => {
     try {
-      const response = await apiClient.get(`/availability/dentist/${dentistId}`, { params })
+      const response = await apiClient.get(`/api/availability/dentist/${dentistId}`, { params })
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch dentist availability')
@@ -285,7 +285,7 @@ export const availabilityAPI = {
 
   create: async (availabilityData) => {
     try {
-      const response = await apiClient.post('/availability', availabilityData)
+      const response = await apiClient.post('/api/availability', availabilityData)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to create availability')
@@ -294,7 +294,7 @@ export const availabilityAPI = {
 
   update: async (id, availabilityData) => {
     try {
-      const response = await apiClient.put(`/availability/${id}`, availabilityData)
+      const response = await apiClient.put(`/api/availability/${id}`, availabilityData)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to update availability')
@@ -303,7 +303,7 @@ export const availabilityAPI = {
 
   delete: async (id) => {
     try {
-      const response = await apiClient.delete(`/availability/${id}`)
+      const response = await apiClient.delete(`/api/availability/${id}`)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to delete availability')
@@ -312,7 +312,7 @@ export const availabilityAPI = {
 
   updateTimeSlot: async (id, slotData) => {
     try {
-      const response = await apiClient.patch(`/availability/${id}/slot`, slotData)
+      const response = await apiClient.patch(`/api/availability/${id}/slot`, slotData)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to update time slot')
@@ -324,7 +324,7 @@ export const availabilityAPI = {
 export const usersAPI = {
   getAll: async (params = {}) => {
     try {
-      const response = await apiClient.get('/users', { params })
+      const response = await apiClient.get('/api/users', { params })
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch users')
@@ -333,7 +333,7 @@ export const usersAPI = {
 
   getById: async (id) => {
     try {
-      const response = await apiClient.get(`/users/${id}`)
+      const response = await apiClient.get(`/api/users/${id}`)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch user')
@@ -342,7 +342,7 @@ export const usersAPI = {
 
   create: async (userData) => {
     try {
-      const response = await apiClient.post('/users', userData)
+      const response = await apiClient.post('/api/users', userData)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to create user')
@@ -351,7 +351,7 @@ export const usersAPI = {
 
   update: async (id, userData) => {
     try {
-      const response = await apiClient.put(`/users/${id}`, userData)
+      const response = await apiClient.put(`/api/users/${id}`, userData)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to update user')
@@ -360,7 +360,7 @@ export const usersAPI = {
 
   delete: async (id) => {
     try {
-      const response = await apiClient.delete(`/users/${id}`)
+      const response = await apiClient.delete(`/api/users/${id}`)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to delete user')
@@ -369,7 +369,7 @@ export const usersAPI = {
 
   updateStatus: async (id, status) => {
     try {
-      const response = await apiClient.patch(`/users/${id}/status`, { isActive: status })
+      const response = await apiClient.patch(`/api/users/${id}/status`, { isActive: status })
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to update user status')
@@ -381,7 +381,7 @@ export const usersAPI = {
 export const dashboardAPI = {
   getStats: async () => {
     try {
-      const response = await apiClient.get('/dashboard/stats')
+      const response = await apiClient.get('/api/dashboard/stats')
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch dashboard stats')
@@ -390,7 +390,7 @@ export const dashboardAPI = {
 
   getTodayAppointments: async () => {
     try {
-      const response = await apiClient.get('/dashboard/appointments/today')
+      const response = await apiClient.get('/api/dashboard/appointments/today')
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch today\'s appointments')
@@ -399,7 +399,7 @@ export const dashboardAPI = {
 
   getRecentActivity: async () => {
     try {
-      const response = await apiClient.get('/dashboard/activity')
+      const response = await apiClient.get('/api/dashboard/activity')
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch recent activity')
@@ -411,7 +411,7 @@ export const dashboardAPI = {
 export const calendarAPI = {
   getAppointments: async (params = {}) => {
     try {
-      const response = await apiClient.get('/calendar/appointments', { params })
+      const response = await apiClient.get('/api/calendar/appointments', { params })
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch calendar appointments')
@@ -420,7 +420,7 @@ export const calendarAPI = {
 
   getAvailability: async (params = {}) => {
     try {
-      const response = await apiClient.get('/calendar/availability', { params })
+      const response = await apiClient.get('/api/calendar/availability', { params })
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch calendar availability')
@@ -432,7 +432,7 @@ export const calendarAPI = {
 export const settingsAPI = {
   get: async () => {
     try {
-      const response = await apiClient.get('/settings')
+      const response = await apiClient.get('/api/settings')
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch settings')
@@ -441,7 +441,7 @@ export const settingsAPI = {
 
   update: async (settingsData) => {
     try {
-      const response = await apiClient.put('/settings', settingsData)
+      const response = await apiClient.put('/api/settings', settingsData)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to update settings')
@@ -450,7 +450,7 @@ export const settingsAPI = {
 
   updatePassword: async (passwordData) => {
     try {
-      const response = await apiClient.put('/settings/password', passwordData)
+      const response = await apiClient.put('/api/settings/password', passwordData)
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to update password')

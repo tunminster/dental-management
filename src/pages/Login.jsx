@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Eye, EyeOff, Lock, Mail, User, AlertCircle } from 'lucide-react'
 
 export default function Login() {
@@ -10,6 +11,11 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const { login, loading } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  // Get the page user was trying to access before login
+  const from = location.state?.from?.pathname || '/'
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -22,7 +28,11 @@ export default function Login() {
 
     const result = await login(formData.username, formData.password)
     
-    if (!result.success) {
+    if (result.success) {
+      console.log('Login successful, redirecting to:', from)
+      // Redirect to the page user was trying to access, or dashboard
+      navigate(from, { replace: true })
+    } else {
       setError(result.error)
     }
   }

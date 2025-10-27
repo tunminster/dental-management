@@ -34,10 +34,50 @@ export default function Dashboard() {
         dashboardAPI.getTodayAppointments()
       ])
       
-      setStats(statsResponse.data || statsResponse)
-      setRecentAppointments(appointmentsResponse.data || appointmentsResponse)
+      console.log('Dashboard API responses:', {
+        statsResponse,
+        appointmentsResponse,
+        statsType: typeof statsResponse,
+        appointmentsType: typeof appointmentsResponse
+      })
+      
+      // Ensure we have arrays, fallback to mock data if API fails
+      const statsData = Array.isArray(statsResponse?.data) ? statsResponse.data : 
+                       Array.isArray(statsResponse) ? statsResponse : stats
+      
+      const appointmentsData = Array.isArray(appointmentsResponse?.data) ? appointmentsResponse.data : 
+                              Array.isArray(appointmentsResponse) ? appointmentsResponse : recentAppointments
+      
+      // Normalize appointment data to match UI expectations
+      const normalizedAppointments = Array.isArray(appointmentsData) ? appointmentsData.map(appointment => ({
+        id: appointment.id,
+        patient: appointment.patient,
+        patientName: appointment.patient, // UI expects 'patientName' for display
+        phone: appointment.phone,
+        dentistId: appointment.dentist_id || appointment.dentistId,
+        dentistName: appointment.dentist_name || appointment.dentistName,
+        date: appointment.date,
+        time: appointment.time,
+        treatment: appointment.treatment,
+        status: appointment.status,
+        notes: appointment.notes,
+        createdAt: appointment.created_at,
+        updatedAt: appointment.updated_at
+      })) : recentAppointments
+      
+      console.log('Processed data:', {
+        statsData: Array.isArray(statsData) ? `${statsData.length} items` : 'Not array',
+        appointmentsData: Array.isArray(appointmentsData) ? `${appointmentsData.length} items` : 'Not array'
+      })
+      
+      setStats(statsData)
+      setRecentAppointments(normalizedAppointments)
     } catch (error) {
-      setError(error.message)
+      console.error('Dashboard API error:', error)
+      // Use mock data as fallback
+      setStats(stats)
+      setRecentAppointments(recentAppointments)
+      setError('Failed to load dashboard data. Showing sample data.')
     } finally {
       setLoading(false)
     }
@@ -84,7 +124,7 @@ export default function Dashboard() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
+        {Array.isArray(stats) && stats.map((stat) => (
           <div key={stat.name} className="card">
             <div className="flex items-center">
               <div className="flex-shrink-0">
@@ -113,7 +153,7 @@ export default function Dashboard() {
         <h3 className="text-lg font-medium text-gray-900 mb-4">Today's Appointments</h3>
         <div className="flow-root">
           <ul className="-my-5 divide-y divide-gray-200">
-            {recentAppointments.map((appointment) => (
+            {Array.isArray(recentAppointments) && recentAppointments.map((appointment) => (
               <li key={appointment.id} className="py-4">
                 <div className="flex items-center space-x-4">
                   <div className="flex-shrink-0">
@@ -141,6 +181,11 @@ export default function Dashboard() {
               </li>
             ))}
           </ul>
+          {!Array.isArray(recentAppointments) || recentAppointments.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <p>No appointments scheduled for today.</p>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
