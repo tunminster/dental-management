@@ -1,117 +1,85 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: dental-management-dashboard
-  labels:
-    app: dental-management-dashboard
-    version: v1.0.0
+  name: dental-management-deployment
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: dental-management-dashboard
+      app: dental-management-app
   template:
     metadata:
       labels:
-        app: dental-management-dashboard
-        version: v1.0.0
+        app: dental-management-app
     spec:
       containers:
-      - name: dental-dashboard
+      - name: dental-management-app
         image: #{repository-image}#
-        ports:
-        - containerPort: 80
         resources:
-          requests:
+          limits:
             memory: "64Mi"
             cpu: "50m"
-          limits:
-            memory: "128Mi"
-            cpu: "100m"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 80
-          initialDelaySeconds: 30
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 3
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 80
-          initialDelaySeconds: 5
-          periodSeconds: 5
-          timeoutSeconds: 3
-          failureThreshold: 3
+        ports:
+        - containerPort: 80
         env:
-        - name: NODE_ENV
-          value: "production"
-        - name: REACT_APP_API_BASE_URL
-          value: #{api-host}#
-        - name: REACT_APP_APP_NAME
+        - name: VITE_API_BASE_URL
+          value: "https://api-demo.bytheapp.com"
+        - name: VITE_APP_NAME
           value: "Dental Management Dashboard"
-        - name: REACT_APP_APP_VERSION
-          value: "1.0.0"
-        - name: REACT_APP_ENVIRONMENT
-          value: "production"
-        - name: REACT_APP_API_TIMEOUT
-          value: "15000"
-        - name: REACT_APP_API_RETRY_ATTEMPTS
-          value: "3"
-        - name: REACT_APP_DEBUG
-          value: "false"
-        - name: REACT_APP_LOG_LEVEL
-          value: "error"
-        - name: REACT_APP_ENABLE_ANALYTICS
-          value: "true"
-        - name: REACT_APP_ENABLE_ERROR_REPORTING
-          value: "true"
-        - name: REACT_APP_DOMAIN
-          value: #{app-domain}#
-        - name: REACT_APP_APP_URL
-          value: #{app-domain-url}#
-      imagePullPolicy: IfNotPresent
-      restartPolicy: Always
+        - name: VITE_APP_VERSION
+          value: "#{Build.BuildNumber}#"
+        - name: VITE_ENVIRONMENT
+          value: "#{env-name}#"
+        - name: VITE_DOMAIN
+          value: "#{host-url}#"
+        - name: VITE_APP_URL
+          value: "https://#{host-url}#"
+        - name: SKIP_PREFLIGHT_CHECK
+          value: "#{SKIP_PREFLIGHT_CHECK}#"
+      imagePullSecrets:
+        - name: #{acr-secret-name}#
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: dental-management-service
-  labels:
-    app: dental-management-dashboard
+  name: dental-management-app-service
 spec:
-  type: ClusterIP
+  selector:
+    app: dental-management-app
   ports:
   - port: 80
     targetPort: 80
-    protocol: TCP
-    name: http
-  selector:
-    app: dental-management-dashboard
----
+--- 
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: dental-management-ingress
+  name: dental-management-app-ingress
   annotations:
-    kubernetes.io/ingress.class: "nginx"
+    kubernetes.io/ingress.class: nginx
     nginx.ingress.kubernetes.io/rewrite-target: /
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/from-to-www-redirect: "true"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      if ($host = '' ) {
+        rewrite ^ https://www.$request_uri permanent;
+      }
+  name: dental-management-app-ingress
+  namespace: #{env-namespace}#
 spec:
   tls:
   - hosts:
-    - #{app-domain}#
-    secretName: dental-dashboard-tls
+    - #{host-url}#
+    secretName: dental-dashboard-ingress-tls
   rules:
-  - host: #{app-domain}#
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: dental-management-service
-            port:
-              number: 80
+    - host: #{host-url}#
+      http:
+        paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: dental-management-app-service
+              port:
+                number: 80
