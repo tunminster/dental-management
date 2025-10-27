@@ -1,7 +1,6 @@
 # Azure DevOps Pipeline for Dental Management Dashboard
 trigger:
-- main
-- develop
+- master
 
 variables:
   buildConfiguration: 'Release'
