@@ -111,9 +111,42 @@ export default function Dentists() {
     try {
       setLoading(true)
       const response = await dentistsAPI.getAll()
-      setDentists(response.data || response)
+      
+      console.log('Dentists API response:', response)
+      
+      // Handle API response and normalize data structure
+      const dentistsData = Array.isArray(response?.data) ? response.data : 
+                          Array.isArray(response) ? response : []
+      
+      // Normalize the data structure to match UI expectations
+      const normalizedDentists = dentistsData.map(dentist => ({
+        id: dentist.id,
+        name: dentist.name,
+        email: dentist.email,
+        phone: dentist.phone,
+        specialization: dentist.specialty, // API uses 'specialty', UI expects 'specialization'
+        licenseNumber: dentist.license, // API uses 'license', UI expects 'licenseNumber'
+        experience: `${dentist.years_of_experience} years`, // Convert to string format
+        status: 'active', // Default status since API doesn't provide this
+        workingHours: {
+          // Create default working hours since API doesn't provide detailed schedule
+          monday: { start: '09:00', end: '17:00' },
+          tuesday: { start: '09:00', end: '17:00' },
+          wednesday: { start: '09:00', end: '17:00' },
+          thursday: { start: '09:00', end: '17:00' },
+          friday: { start: '09:00', end: '17:00' },
+          saturday: dentist.working_days.includes('6') ? { start: '09:00', end: '13:00' } : { start: '00:00', end: '00:00' },
+          sunday: dentist.working_days.includes('7') ? { start: '09:00', end: '13:00' } : { start: '00:00', end: '00:00' }
+        }
+      }))
+      
+      console.log('Normalized dentists data:', normalizedDentists)
+      setDentists(normalizedDentists)
     } catch (error) {
-      setError(error.message)
+      console.error('Dentists API error:', error)
+      // Use mock data as fallback
+      setDentists(dentists)
+      setError('Failed to load dentists data. Showing sample data.')
     } finally {
       setLoading(false)
     }
@@ -162,8 +195,11 @@ export default function Dentists() {
   })
 
   const getWorkingDays = (workingHours) => {
+    if (!workingHours) return '0 days/week'
+    
     const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
-    return days.filter(day => workingHours[day].start !== '00:00').length
+    const workingDaysCount = days.filter(day => workingHours[day] && workingHours[day].start !== '00:00').length
+    return `${workingDaysCount} days/week`
   }
 
   if (loading) {
@@ -291,7 +327,7 @@ export default function Dentists() {
               </div>
               <div className="flex items-center text-sm text-gray-600">
                 <Calendar className="h-4 w-4 mr-2" />
-                {getWorkingDays(dentist.workingHours)} days/week
+                {getWorkingDays(dentist.workingHours)}
               </div>
             </div>
 

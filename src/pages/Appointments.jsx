@@ -102,8 +102,39 @@ export default function Appointments() {
         dentistsAPI.getAll()
       ])
       
-      setAppointments(appointmentsResponse.data || appointmentsResponse)
-      setDentists(dentistsResponse.data || dentistsResponse)
+      // Normalize appointments data to match UI expectations
+      const appointmentsData = Array.isArray(appointmentsResponse?.data) ? appointmentsResponse.data : 
+                               Array.isArray(appointmentsResponse) ? appointmentsResponse : []
+      
+      const normalizedAppointments = appointmentsData.map(appointment => ({
+        id: appointment.id,
+        patient: appointment.patient,
+        phone: appointment.phone,
+        dentistId: appointment.dentist_id, // API uses 'dentist_id', UI expects 'dentistId'
+        dentistName: appointment.dentist_name, // API uses 'dentist_name', UI expects 'dentistName'
+        date: appointment.date,
+        time: appointment.time,
+        treatment: appointment.treatment,
+        status: appointment.status,
+        notes: appointment.notes,
+        createdAt: appointment.created_at,
+        updatedAt: appointment.updated_at
+      }))
+      
+      console.log('Normalized appointments data:', normalizedAppointments)
+      setAppointments(normalizedAppointments)
+      
+      // Normalize dentist data to match UI expectations
+      const dentistsData = Array.isArray(dentistsResponse?.data) ? dentistsResponse.data : 
+                          Array.isArray(dentistsResponse) ? dentistsResponse : []
+      
+      const normalizedDentists = dentistsData.map(dentist => ({
+        id: dentist.id,
+        name: dentist.name,
+        specialization: dentist.specialty // API uses 'specialty', UI expects 'specialization'
+      }))
+      
+      setDentists(normalizedDentists)
     } catch (error) {
       setError(error.message)
     } finally {
@@ -115,7 +146,24 @@ export default function Appointments() {
     try {
       setSubmitting(true)
       const response = await appointmentsAPI.create(appointmentData)
-      setAppointments(prev => [...prev, response])
+      
+      // Normalize the response data
+      const normalizedResponse = {
+        id: response.id,
+        patient: response.patient,
+        phone: response.phone,
+        dentistId: response.dentist_id || response.dentistId,
+        dentistName: response.dentist_name || response.dentistName,
+        date: response.date,
+        time: response.time,
+        treatment: response.treatment,
+        status: response.status,
+        notes: response.notes,
+        createdAt: response.created_at,
+        updatedAt: response.updated_at
+      }
+      
+      setAppointments(prev => [...prev, normalizedResponse])
       setShowAddForm(false)
       setError('')
     } catch (error) {
@@ -128,7 +176,24 @@ export default function Appointments() {
   const handleUpdateAppointment = async (id, appointmentData) => {
     try {
       const response = await appointmentsAPI.update(id, appointmentData)
-      setAppointments(prev => prev.map(apt => apt.id === id ? response : apt))
+      
+      // Normalize the response data
+      const normalizedResponse = {
+        id: response.id,
+        patient: response.patient,
+        phone: response.phone,
+        dentistId: response.dentist_id || response.dentistId,
+        dentistName: response.dentist_name || response.dentistName,
+        date: response.date,
+        time: response.time,
+        treatment: response.treatment,
+        status: response.status,
+        notes: response.notes,
+        createdAt: response.created_at,
+        updatedAt: response.updated_at
+      }
+      
+      setAppointments(prev => prev.map(apt => apt.id === id ? normalizedResponse : apt))
     } catch (error) {
       setError(error.message)
     }
@@ -151,6 +216,15 @@ export default function Appointments() {
       setError(error.message)
     }
   }
+
+  const filteredAppointments = appointments.filter(appointment => {
+    const matchesSearch = appointment.patient.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         appointment.treatment.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         appointment.notes.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesStatus = statusFilter === 'all' || appointment.status === statusFilter
+    const matchesDentist = dentistFilter === 'all' || appointment.dentistId.toString() === dentistFilter
+    return matchesSearch && matchesStatus && matchesDentist
+  })
 
   if (loading) {
     return (
@@ -343,11 +417,11 @@ export default function Appointments() {
               e.preventDefault()
               const formData = new FormData(e.target)
               const appointmentData = {
-                patientName: formData.get('patientName'),
-                patientPhone: formData.get('patientPhone'),
+                patient: formData.get('patientName'), // API expects 'patient'
+                phone: formData.get('patientPhone'), // API expects 'phone'
                 date: formData.get('date'),
                 time: formData.get('time'),
-                dentistId: parseInt(formData.get('dentistId')),
+                dentist_id: parseInt(formData.get('dentistId')), // API expects 'dentist_id'
                 treatment: formData.get('treatment'),
                 notes: formData.get('notes'),
                 status: 'pending'

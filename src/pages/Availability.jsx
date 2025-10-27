@@ -78,8 +78,34 @@ export default function Availability() {
         dentistsAPI.getAll()
       ])
       
-      setAvailabilityData(availabilityResponse.data || availabilityResponse)
-      setDentists(dentistsResponse.data || dentistsResponse)
+      // Normalize availability data to match UI expectations
+      const availabilityData = Array.isArray(availabilityResponse?.data) ? availabilityResponse.data : 
+                               Array.isArray(availabilityResponse) ? availabilityResponse : []
+      
+      const normalizedAvailability = availabilityData.map(availability => ({
+        id: availability.id,
+        dentistId: availability.dentist_id, // API uses 'dentist_id', UI expects 'dentistId'
+        dentistName: availability.dentist_name, // API uses 'dentist_name', UI expects 'dentistName'
+        date: availability.date,
+        timeSlots: availability.time_slots || [], // API uses 'time_slots', UI expects 'timeSlots'
+        createdAt: availability.created_at,
+        updatedAt: availability.updated_at
+      }))
+      
+      console.log('Normalized availability data:', normalizedAvailability)
+      setAvailabilityData(normalizedAvailability)
+      
+      // Normalize dentist data to match UI expectations
+      const dentistsData = Array.isArray(dentistsResponse?.data) ? dentistsResponse.data : 
+                          Array.isArray(dentistsResponse) ? dentistsResponse : []
+      
+      const normalizedDentists = dentistsData.map(dentist => ({
+        id: dentist.id,
+        name: dentist.name,
+        specialization: dentist.specialty // API uses 'specialty', UI expects 'specialization'
+      }))
+      
+      setDentists(normalizedDentists)
     } catch (error) {
       setError(error.message)
     } finally {
@@ -91,7 +117,19 @@ export default function Availability() {
     try {
       setSubmitting(true)
       const response = await availabilityAPI.create(availabilityData)
-      setAvailabilityData(prev => [...prev, response])
+      
+      // Normalize the response data
+      const normalizedResponse = {
+        id: response.id,
+        dentistId: response.dentist_id || response.dentistId,
+        dentistName: response.dentist_name || response.dentistName,
+        date: response.date,
+        timeSlots: response.time_slots || response.timeSlots || [],
+        createdAt: response.created_at,
+        updatedAt: response.updated_at
+      }
+      
+      setAvailabilityData(prev => [...prev, normalizedResponse])
       setShowAddForm(false)
       setError('')
     } catch (error) {
@@ -104,7 +142,19 @@ export default function Availability() {
   const handleUpdateAvailability = async (id, availabilityData) => {
     try {
       const response = await availabilityAPI.update(id, availabilityData)
-      setAvailabilityData(prev => prev.map(avail => avail.id === id ? response : avail))
+      
+      // Normalize the response data
+      const normalizedResponse = {
+        id: response.id,
+        dentistId: response.dentist_id || response.dentistId,
+        dentistName: response.dentist_name || response.dentistName,
+        date: response.date,
+        timeSlots: response.time_slots || response.timeSlots || [],
+        createdAt: response.created_at,
+        updatedAt: response.updated_at
+      }
+      
+      setAvailabilityData(prev => prev.map(avail => avail.id === id ? normalizedResponse : avail))
       setEditingAvailability(null)
     } catch (error) {
       setError(error.message)
@@ -118,6 +168,36 @@ export default function Availability() {
     } catch (error) {
       setError(error.message)
     }
+  }
+
+  const handleAddFormSubmit = async (e) => {
+    e.preventDefault()
+    const formData = new FormData(e.target)
+    
+    const availabilityData = {
+      dentist_id: parseInt(formData.get('dentist')),
+      date: formData.get('date'),
+      time_slots: [
+        { start: formData.get('startTime'), end: formData.get('endTime'), available: true }
+      ]
+    }
+    
+    await handleAddAvailability(availabilityData)
+  }
+
+  const handleEditFormSubmit = async (e) => {
+    e.preventDefault()
+    const formData = new FormData(e.target)
+    
+    const availabilityData = {
+      dentist_id: parseInt(formData.get('dentist')),
+      date: formData.get('date'),
+      time_slots: [
+        { start: formData.get('startTime'), end: formData.get('endTime'), available: true }
+      ]
+    }
+    
+    await handleUpdateAvailability(editingAvailability.id, availabilityData)
   }
 
   const filteredAvailability = availabilityData.filter(avail => {
@@ -278,11 +358,12 @@ export default function Availability() {
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Add Availability</h3>
-            <form className="space-y-4">
+            <form className="space-y-4" onSubmit={handleAddFormSubmit}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Dentist</label>
-                  <select className="input-field">
+                  <select name="dentist" className="input-field" required>
+                    <option value="">Select a dentist</option>
                     {dentists.map(dentist => (
                       <option key={dentist.id} value={dentist.id}>{dentist.name}</option>
                     ))}
@@ -290,7 +371,7 @@ export default function Availability() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                  <input type="date" className="input-field" />
+                  <input name="date" type="date" className="input-field" required />
                 </div>
               </div>
 
@@ -299,11 +380,11 @@ export default function Availability() {
                 <div className="space-y-3">
                   <div className="flex items-center gap-4">
                     <div className="flex-1">
-                      <input type="time" className="input-field" placeholder="Start time" />
+                      <input name="startTime" type="time" className="input-field" placeholder="Start time" required />
                     </div>
                     <span className="text-gray-400">to</span>
                     <div className="flex-1">
-                      <input type="time" className="input-field" placeholder="End time" />
+                      <input name="endTime" type="time" className="input-field" placeholder="End time" required />
                     </div>
                     <button type="button" className="btn-secondary">
                       <Plus className="h-4 w-4" />
@@ -348,14 +429,24 @@ export default function Availability() {
             <h3 className="text-lg font-medium text-gray-900 mb-4">
               Edit Availability - {editingAvailability.dentistName}
             </h3>
-            <form className="space-y-4">
+            <form className="space-y-4" onSubmit={handleEditFormSubmit}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Dentist</label>
+                  <select name="dentist" className="input-field" defaultValue={editingAvailability.dentistId} required>
+                    {dentists.map(dentist => (
+                      <option key={dentist.id} value={dentist.id}>{dentist.name}</option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
                   <input 
+                    name="date"
                     type="date" 
                     defaultValue={editingAvailability.date}
                     className="input-field" 
+                    required
                   />
                 </div>
                 <div>
