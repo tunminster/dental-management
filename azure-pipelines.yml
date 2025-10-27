@@ -71,11 +71,11 @@ stages:
             inputs:
               SourceFolder: '$(System.DefaultWorkingDirectory)'
               Contents: 'k8s-deployment.yaml'
-              TargetFolder: '$(Build.ArtifactStagingDirectory)/devops'
+              TargetFolder: '$(Build.ArtifactStagingDirectory)'
           - task: qetza.replacetokens.replacetokens-task.replacetokens@3
             displayName: 'Replace tokens in deploy file'
             inputs:
-              rootDirectory: '$(Build.ArtifactStagingDirectory)/devops'
+              rootDirectory: '$(Build.ArtifactStagingDirectory)'
               targetFiles: 'k8s-deployment.yaml'
               escapeType: none
           - task: CopyFiles@2
@@ -95,7 +95,7 @@ stages:
               targetFiles: '.env'
               escapeType: none
               
-          - script: 'cat $(Build.ArtifactStagingDirectory)/devops/k8s-deployment.yaml'
+          - script: 'cat $(Build.ArtifactStagingDirectory)/k8s-deployment.yaml'
             displayName: 'Cat deploy'
           
           - script: 'cat $(Build.ArtifactStagingDirectory)/.env'
@@ -111,7 +111,7 @@ stages:
               kubernetesServiceEndpoint: 'by-the-app-cluster'
               namespace: 'by-the-app-prod'
               command: 'apply'
-              arguments: '-f $(Build.ArtifactStagingDirectory)/devops/k8s-deployment.yaml'
+              arguments: '-f $(Build.ArtifactStagingDirectory)/k8s-deployment.yaml'
               secretType: 'dockerRegistry'
               containerRegistryType: 'Container Registry'
               dockerRegistryEndpoint: 'containerRegistry'
