@@ -62,6 +62,8 @@ export default function Patients() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showAddForm, setShowAddForm] = useState(false)
+  const [showEditForm, setShowEditForm] = useState(false)
+  const [editingPatient, setEditingPatient] = useState(null)
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -159,6 +161,16 @@ export default function Patients() {
     } catch (error) {
       setError(error.message)
     }
+  }
+
+  const handleEditPatient = (patient) => {
+    setEditingPatient(patient)
+    setShowEditForm(true)
+  }
+
+  const handleCloseEditForm = () => {
+    setShowEditForm(false)
+    setEditingPatient(null)
   }
 
   const filteredPatients = patients.filter(patient => {
@@ -319,11 +331,17 @@ export default function Patients() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex gap-2">
-                      <button className="text-primary-600 hover:text-primary-900 flex items-center gap-1">
+                      <button 
+                        onClick={() => handleEditPatient(patient)}
+                        className="text-primary-600 hover:text-primary-900 flex items-center gap-1"
+                      >
                         <Edit className="h-4 w-4" />
                         Edit
                       </button>
-                      <button className="text-red-600 hover:text-red-900 flex items-center gap-1">
+                      <button 
+                        onClick={() => handleDeletePatient(patient.id)}
+                        className="text-red-600 hover:text-red-900 flex items-center gap-1"
+                      >
                         <Trash2 className="h-4 w-4" />
                         Delete
                       </button>
@@ -400,6 +418,137 @@ export default function Patients() {
                     </>
                   ) : (
                     'Add Patient'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Patient Modal */}
+      {showEditForm && editingPatient && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Edit Patient</h3>
+            <form className="space-y-4" onSubmit={(e) => {
+              e.preventDefault()
+              const formData = new FormData(e.target)
+              const patientData = {
+                name: formData.get('name'),
+                email: formData.get('email'),
+                phone: formData.get('phone'),
+                dateOfBirth: formData.get('dateOfBirth'),
+                address: formData.get('address'),
+                emergencyContact: formData.get('emergencyContact'),
+                medicalHistory: formData.get('medicalHistory'),
+                status: formData.get('status')
+              }
+              handleUpdatePatient(editingPatient.id, patientData)
+              handleCloseEditForm()
+            }}>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                <input 
+                  type="text" 
+                  name="name" 
+                  required 
+                  className="input-field" 
+                  placeholder="Enter patient name"
+                  defaultValue={editingPatient.name}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input 
+                  type="email" 
+                  name="email" 
+                  required 
+                  className="input-field" 
+                  placeholder="Enter email address"
+                  defaultValue={editingPatient.email}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                <input 
+                  type="tel" 
+                  name="phone" 
+                  required 
+                  className="input-field" 
+                  placeholder="Enter phone number"
+                  defaultValue={editingPatient.phone}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
+                <input 
+                  type="date" 
+                  name="dateOfBirth" 
+                  required 
+                  className="input-field"
+                  defaultValue={editingPatient.dateOfBirth}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select 
+                  name="status" 
+                  className="input-field"
+                  defaultValue={editingPatient.status}
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="pending">Pending</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                <textarea 
+                  name="address" 
+                  className="input-field" 
+                  rows="2" 
+                  placeholder="Enter address"
+                  defaultValue={editingPatient.address || ''}
+                ></textarea>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact</label>
+                <input 
+                  type="text" 
+                  name="emergencyContact" 
+                  className="input-field" 
+                  placeholder="Emergency contact name and phone"
+                  defaultValue={editingPatient.emergencyContact || ''}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Medical History</label>
+                <textarea 
+                  name="medicalHistory" 
+                  className="input-field" 
+                  rows="3" 
+                  placeholder="Medical history notes"
+                  defaultValue={editingPatient.medicalHistory || ''}
+                ></textarea>
+              </div>
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={handleCloseEditForm}
+                  className="btn-secondary"
+                  disabled={submitting}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary" disabled={submitting}>
+                  {submitting ? (
+                    <>
+                      <Loader className="h-4 w-4 animate-spin mr-2" />
+                      Updating...
+                    </>
+                  ) : (
+                    'Update Patient'
                   )}
                 </button>
               </div>
