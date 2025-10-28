@@ -112,8 +112,8 @@ export default function Appointments() {
         phone: appointment.phone,
         dentistId: appointment.dentist_id, // API uses 'dentist_id', UI expects 'dentistId'
         dentistName: appointment.dentist_name, // API uses 'dentist_name', UI expects 'dentistName'
-        date: appointment.date,
-        time: appointment.time,
+        date: appointment.appointment_date, // API uses 'appointment_date', UI expects 'date'
+        time: appointment.appointment_time, // API uses 'appointment_time', UI expects 'time'
         treatment: appointment.treatment,
         status: appointment.status,
         notes: appointment.notes,
@@ -184,8 +184,8 @@ export default function Appointments() {
         phone: response.phone,
         dentistId: response.dentist_id || response.dentistId,
         dentistName: response.dentist_name || response.dentistName,
-        date: response.date,
-        time: response.time,
+        date: response.appointment_date || response.date, // Handle both API formats
+        time: response.appointment_time || response.time, // Handle both API formats
         treatment: response.treatment,
         status: response.status,
         notes: response.notes,

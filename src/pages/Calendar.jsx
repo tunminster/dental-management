@@ -23,25 +23,81 @@ const appointments = [
 
 export default function Calendar() {
   const [appointments, setAppointments] = useState([])
+  const [availability, setAvailability] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedMonth, setSelectedMonth] = useState(currentMonth)
   const [selectedYear, setSelectedYear] = useState(currentYear)
   const [selectedDate, setSelectedDate] = useState(null)
+  const [showAvailability, setShowAvailability] = useState(true)
 
   useEffect(() => {
-    loadAppointments()
+    loadCalendarData()
   }, [selectedMonth, selectedYear])
 
-  const loadAppointments = async () => {
+  const loadCalendarData = async () => {
     try {
       setLoading(true)
+      
+      // Calculate beginning and end of month dates
+      const firstDayOfMonth = new Date(selectedYear, selectedMonth, 1)
+      const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0)
+      
+      // Format dates as YYYY-MM-DD
+      const dateFrom = firstDayOfMonth.toISOString().split('T')[0]
+      const dateTo = lastDayOfMonth.toISOString().split('T')[0]
+      
       const params = {
-        month: selectedMonth + 1,
-        year: selectedYear
+        date_from: dateFrom,
+        date_to: dateTo
       }
-      const response = await calendarAPI.getAppointments(params)
-      setAppointments(response.data || response)
+      
+      console.log('Calendar API params:', params)
+      
+      // Load both appointments and availability in parallel
+      const [appointmentsResponse, availabilityResponse] = await Promise.all([
+        calendarAPI.getAppointments(params),
+        calendarAPI.getAvailability(params)
+      ])
+      
+      // Normalize appointment data to match UI expectations
+      const appointmentsData = Array.isArray(appointmentsResponse?.data) ? appointmentsResponse.data : 
+                             Array.isArray(appointmentsResponse) ? appointmentsResponse : []
+      
+      const normalizedAppointments = appointmentsData.map(appointment => ({
+        id: appointment.id,
+        patient: appointment.patient,
+        phone: appointment.phone,
+        dentistId: appointment.dentist_id,
+        dentistName: appointment.dentist_name,
+        date: appointment.appointment_date, // API uses 'appointment_date', UI expects 'date'
+        time: appointment.appointment_time, // API uses 'appointment_time', UI expects 'time'
+        treatment: appointment.treatment,
+        status: appointment.status,
+        notes: appointment.notes,
+        createdAt: appointment.created_at,
+        updatedAt: appointment.updated_at
+      }))
+      
+      // Normalize availability data
+      const availabilityData = Array.isArray(availabilityResponse?.data) ? availabilityResponse.data : 
+                             Array.isArray(availabilityResponse) ? availabilityResponse : []
+      
+      const normalizedAvailability = availabilityData.map(avail => ({
+        id: avail.id,
+        dentistId: avail.dentist_id,
+        dentistName: avail.dentist_name,
+        date: avail.date,
+        timeSlots: avail.time_slots || [],
+        createdAt: avail.created_at,
+        updatedAt: avail.updated_at
+      }))
+      
+      console.log('Normalized calendar appointments:', normalizedAppointments)
+      console.log('Normalized availability:', normalizedAvailability)
+      
+      setAppointments(normalizedAppointments)
+      setAvailability(normalizedAvailability)
     } catch (error) {
       setError(error.message)
     } finally {
@@ -60,6 +116,18 @@ export default function Calendar() {
   const getAppointmentsForDate = (date) => {
     const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(date).padStart(2, '0')}`
     return appointments.filter(apt => apt.date === dateStr)
+  }
+
+  const getAvailabilityForDate = (date) => {
+    const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(date).padStart(2, '0')}`
+    return availability.filter(avail => {
+      // Only include dentists who have at least one available time slot
+      if (avail.date !== dateStr) return false
+      
+      // Check if any time slot is available
+      const hasAvailableSlot = avail.timeSlots && avail.timeSlots.some(slot => slot.available === true)
+      return hasAvailableSlot
+    })
   }
 
   const navigateMonth = (direction) => {
@@ -112,10 +180,22 @@ export default function Calendar() {
           <h1 className="text-2xl font-bold text-gray-900">Calendar</h1>
           <p className="text-gray-600">View and manage your appointment schedule</p>
         </div>
-        <button className="btn-primary flex items-center gap-2">
-          <Plus className="h-4 w-4" />
-          New Appointment
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowAvailability(!showAvailability)}
+            className={`px-3 py-2 rounded-lg text-sm font-medium ${
+              showAvailability 
+                ? 'bg-primary-100 text-primary-700 border border-primary-200' 
+                : 'bg-gray-100 text-gray-700 border border-gray-200'
+            }`}
+          >
+            {showAvailability ? 'Hide Availability' : 'Show Availability'}
+          </button>
+          <button className="btn-primary flex items-center gap-2">
+            <Plus className="h-4 w-4" />
+            New Appointment
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -165,6 +245,7 @@ export default function Calendar() {
                 }
 
                 const dayAppointments = getAppointmentsForDate(day)
+                const dayAvailability = getAvailabilityForDate(day)
                 const isToday = day === currentDate.getDate() && 
                                selectedMonth === currentMonth && 
                                selectedYear === currentYear
@@ -181,6 +262,7 @@ export default function Calendar() {
                       {day}
                     </div>
                     <div className="mt-1 space-y-1">
+                      {/* Show appointments */}
                       {dayAppointments.slice(0, 2).map(appointment => (
                         <div
                           key={appointment.id}
@@ -191,7 +273,14 @@ export default function Calendar() {
                       ))}
                       {dayAppointments.length > 2 && (
                         <div className="text-xs text-gray-500">
-                          +{dayAppointments.length - 2} more
+                          +{dayAppointments.length - 2} more appointments
+                        </div>
+                      )}
+                      
+                      {/* Show availability when enabled */}
+                      {showAvailability && dayAvailability.length > 0 && (
+                        <div className="text-xs text-green-600 font-medium">
+                          {dayAvailability.length} dentist{dayAvailability.length > 1 ? 's' : ''} available
                         </div>
                       )}
                     </div>
@@ -213,25 +302,73 @@ export default function Calendar() {
             </h3>
             
             {selectedDate && (
-              <div className="space-y-3">
-                {getAppointmentsForDate(selectedDate).length > 0 ? (
-                  getAppointmentsForDate(selectedDate).map(appointment => (
-                    <div key={appointment.id} className="border border-gray-200 rounded-lg p-3">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Clock className="h-4 w-4 text-gray-400" />
-                        <span className="text-sm font-medium text-gray-900">{appointment.time}</span>
-                      </div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <User className="h-4 w-4 text-gray-400" />
-                        <span className="text-sm text-gray-700">{appointment.patient}</span>
-                      </div>
-                      <div className="text-sm text-gray-600">{appointment.treatment}</div>
+              <div className="space-y-4">
+                {/* Appointments Section */}
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900 mb-2">Appointments</h4>
+                  {getAppointmentsForDate(selectedDate).length > 0 ? (
+                    <div className="space-y-2">
+                      {getAppointmentsForDate(selectedDate).map(appointment => (
+                        <div key={appointment.id} className="border border-gray-200 rounded-lg p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Clock className="h-4 w-4 text-gray-400" />
+                            <span className="text-sm font-medium text-gray-900">{appointment.time}</span>
+                          </div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <User className="h-4 w-4 text-gray-400" />
+                            <span className="text-sm text-gray-700">{appointment.patient}</span>
+                          </div>
+                          <div className="text-sm text-gray-600">{appointment.treatment}</div>
+                        </div>
+                      ))}
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center py-8">
-                    <div className="text-gray-400 mb-2">No appointments</div>
-                    <div className="text-sm text-gray-500">This day is free</div>
+                  ) : (
+                    <div className="text-center py-4 border border-gray-200 rounded-lg">
+                      <div className="text-gray-400 mb-1">No appointments</div>
+                      <div className="text-xs text-gray-500">This day is free</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Availability Section */}
+                {showAvailability && (
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-900 mb-2">Dentist Availability</h4>
+                    {getAvailabilityForDate(selectedDate).length > 0 ? (
+                      <div className="space-y-2">
+                        {getAvailabilityForDate(selectedDate).map(avail => {
+                          // Filter to only show available time slots
+                          const availableSlots = avail.timeSlots.filter(slot => slot.available === true)
+                          
+                          return (
+                            <div key={avail.id} className="border border-green-200 rounded-lg p-3 bg-green-50">
+                              <div className="text-sm font-medium text-green-800 mb-2">
+                                {avail.dentistName}
+                              </div>
+                              <div className="space-y-1">
+                                {availableSlots.length > 0 ? (
+                                  availableSlots.map((slot, index) => (
+                                    <div key={index} className="text-xs text-green-700">
+                                      {slot.start} - {slot.end} 
+                                      <span className="ml-2 px-1 py-0.5 rounded text-xs bg-green-100 text-green-800">
+                                        Available
+                                      </span>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="text-xs text-gray-500">No available slots</div>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 border border-gray-200 rounded-lg">
+                        <div className="text-gray-400 mb-1">No dentists available</div>
+                        <div className="text-xs text-gray-500">All dentists are fully booked</div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
