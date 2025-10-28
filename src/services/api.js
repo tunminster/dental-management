@@ -411,7 +411,7 @@ export const dashboardAPI = {
 export const calendarAPI = {
   getAppointments: async (params = {}) => {
     try {
-      const response = await apiClient.get('/api/calendar/appointments', { params })
+      const response = await apiClient.get('/api/appointments', { params })
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch calendar appointments')
@@ -420,7 +420,7 @@ export const calendarAPI = {
 
   getAvailability: async (params = {}) => {
     try {
-      const response = await apiClient.get('/api/calendar/availability', { params })
+      const response = await apiClient.get('/api/availability', { params })
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch calendar availability')

@@ -16,6 +16,17 @@ const recentAppointments = [
   { id: 4, patient: 'Emily Wilson', time: '3:30 PM', treatment: 'Extraction', status: 'confirmed' },
 ]
 
+// Helper function to map stat names to icons
+const getIconForStat = (statName) => {
+  const iconMap = {
+    "Today's Appointments": Calendar,
+    "Total Patients": Users,
+    "Pending Appointments": Clock,
+    "Revenue This Month": TrendingUp,
+  }
+  return iconMap[statName] || Calendar // Default to Calendar icon
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState([])
   const [recentAppointments, setRecentAppointments] = useState([])
@@ -41,9 +52,28 @@ export default function Dashboard() {
         appointmentsType: typeof appointmentsResponse
       })
       
-      // Ensure we have arrays, fallback to mock data if API fails
-      const statsData = Array.isArray(statsResponse?.data) ? statsResponse.data : 
-                       Array.isArray(statsResponse) ? statsResponse : stats
+      // Process stats data from API response
+      let statsData = stats // Default to mock data
+      
+      if (statsResponse?.stats && Array.isArray(statsResponse.stats)) {
+        // API returns { stats: [...] } format
+        statsData = statsResponse.stats.map(stat => ({
+          ...stat,
+          icon: getIconForStat(stat.name) // Add missing icon property
+        }))
+      } else if (Array.isArray(statsResponse?.data)) {
+        // API returns { data: [...] } format
+        statsData = statsResponse.data.map(stat => ({
+          ...stat,
+          icon: getIconForStat(stat.name) // Add missing icon property
+        }))
+      } else if (Array.isArray(statsResponse)) {
+        // API returns [...] format directly
+        statsData = statsResponse.map(stat => ({
+          ...stat,
+          icon: getIconForStat(stat.name) // Add missing icon property
+        }))
+      }
       
       const appointmentsData = Array.isArray(appointmentsResponse?.data) ? appointmentsResponse.data : 
                               Array.isArray(appointmentsResponse) ? appointmentsResponse : recentAppointments
@@ -67,6 +97,7 @@ export default function Dashboard() {
       
       console.log('Processed data:', {
         statsData: Array.isArray(statsData) ? `${statsData.length} items` : 'Not array',
+        statsDataSample: Array.isArray(statsData) && statsData.length > 0 ? statsData[0] : 'No data',
         appointmentsData: Array.isArray(appointmentsData) ? `${appointmentsData.length} items` : 'Not array'
       })
       

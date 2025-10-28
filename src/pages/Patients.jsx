@@ -72,7 +72,26 @@ export default function Patients() {
     try {
       setLoading(true)
       const response = await patientsAPI.getAll()
-      setPatients(response.data || response)
+      
+      // Normalize patient data to match UI expectations
+      const patientsData = Array.isArray(response?.data) ? response.data : 
+                          Array.isArray(response) ? response : []
+      
+      const normalizedPatients = patientsData.map(patient => ({
+        id: patient.id,
+        name: patient.name,
+        email: patient.email,
+        phone: patient.phone,
+        dateOfBirth: patient.date_of_birth, // API uses 'date_of_birth', UI expects 'dateOfBirth'
+        lastVisit: patient.last_visit, // API uses 'last_visit', UI expects 'lastVisit'
+        nextAppointment: patient.next_appointment, // API uses 'next_appointment', UI expects 'nextAppointment'
+        status: patient.status,
+        createdAt: patient.created_at,
+        updatedAt: patient.updated_at
+      }))
+      
+      console.log('Normalized patients data:', normalizedPatients)
+      setPatients(normalizedPatients)
     } catch (error) {
       setError(error.message)
     } finally {
@@ -84,7 +103,22 @@ export default function Patients() {
     try {
       setSubmitting(true)
       const response = await patientsAPI.create(patientData)
-      setPatients(prev => [...prev, response])
+      
+      // Normalize the response data
+      const normalizedPatient = {
+        id: response.id,
+        name: response.name,
+        email: response.email,
+        phone: response.phone,
+        dateOfBirth: response.date_of_birth || response.dateOfBirth,
+        lastVisit: response.last_visit || response.lastVisit,
+        nextAppointment: response.next_appointment || response.nextAppointment,
+        status: response.status,
+        createdAt: response.created_at,
+        updatedAt: response.updated_at
+      }
+      
+      setPatients(prev => [...prev, normalizedPatient])
       setShowAddForm(false)
       setError('')
     } catch (error) {
@@ -97,7 +131,22 @@ export default function Patients() {
   const handleUpdatePatient = async (id, patientData) => {
     try {
       const response = await patientsAPI.update(id, patientData)
-      setPatients(prev => prev.map(patient => patient.id === id ? response : patient))
+      
+      // Normalize the response data
+      const normalizedPatient = {
+        id: response.id,
+        name: response.name,
+        email: response.email,
+        phone: response.phone,
+        dateOfBirth: response.date_of_birth || response.dateOfBirth,
+        lastVisit: response.last_visit || response.lastVisit,
+        nextAppointment: response.next_appointment || response.nextAppointment,
+        status: response.status,
+        createdAt: response.created_at,
+        updatedAt: response.updated_at
+      }
+      
+      setPatients(prev => prev.map(patient => patient.id === id ? normalizedPatient : patient))
     } catch (error) {
       setError(error.message)
     }
@@ -230,7 +279,7 @@ export default function Patients() {
                       <div className="ml-4">
                         <div className="text-sm font-medium text-gray-900">{patient.name}</div>
                         <div className="text-sm text-gray-500">
-                          DOB: {new Date(patient.dateOfBirth).toLocaleDateString()}
+                          DOB: {patient.dateOfBirth ? new Date(patient.dateOfBirth).toLocaleDateString() : 'N/A'}
                         </div>
                       </div>
                     </div>
@@ -248,7 +297,7 @@ export default function Patients() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900 flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-gray-400" />
-                      {new Date(patient.lastVisit).toLocaleDateString()}
+                      {patient.lastVisit ? new Date(patient.lastVisit).toLocaleDateString() : 'No visits yet'}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
