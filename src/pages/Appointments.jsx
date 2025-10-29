@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Search, Filter, Calendar, Clock, User, Phone, AlertCircle, Loader } from 'lucide-react'
-import { appointmentsAPI, dentistsAPI } from '../services/api'
+import { appointmentsAPI, dentistsAPI, availabilityAPI } from '../services/api'
+import { formatDateInClinicTimezone } from '../utils/timezone'
 
 const dentists = [
   { id: 1, name: 'Dr. Sarah Johnson', specialization: 'General Dentistry' },
@@ -82,6 +83,7 @@ const statusColors = {
 export default function Appointments() {
   const [appointments, setAppointments] = useState([])
   const [dentists, setDentists] = useState([])
+  const [availability, setAvailability] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
@@ -89,6 +91,9 @@ export default function Appointments() {
   const [dentistFilter, setDentistFilter] = useState('all')
   const [showAddForm, setShowAddForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [selectedDentistId, setSelectedDentistId] = useState('')
+  const [selectedDate, setSelectedDate] = useState('')
+  const [availableTimeSlots, setAvailableTimeSlots] = useState([])
 
   useEffect(() => {
     loadData()
@@ -97,9 +102,10 @@ export default function Appointments() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [appointmentsResponse, dentistsResponse] = await Promise.all([
+      const [appointmentsResponse, dentistsResponse, availabilityResponse] = await Promise.all([
         appointmentsAPI.getAll(),
-        dentistsAPI.getAll()
+        dentistsAPI.getAll(),
+        availabilityAPI.getAll()
       ])
       
       // Normalize appointments data to match UI expectations
@@ -135,6 +141,20 @@ export default function Appointments() {
       }))
       
       setDentists(normalizedDentists)
+      
+      // Normalize availability data
+      const availabilityData = Array.isArray(availabilityResponse?.data) ? availabilityResponse.data : 
+                              Array.isArray(availabilityResponse) ? availabilityResponse : []
+      
+      const normalizedAvailability = availabilityData.map(avail => ({
+        id: avail.id,
+        dentistId: avail.dentist_id,
+        dentistName: avail.dentist_name,
+        date: avail.date,
+        timeSlots: avail.time_slots || []
+      }))
+      
+      setAvailability(normalizedAvailability)
     } catch (error) {
       setError(error.message)
     } finally {
@@ -206,6 +226,38 @@ export default function Appointments() {
     } catch (error) {
       setError(error.message)
     }
+  }
+
+  const handleDentistChange = (dentistId) => {
+    setSelectedDentistId(dentistId)
+    setSelectedDate('')
+    setAvailableTimeSlots([])
+  }
+
+  const handleDateChange = (date) => {
+    setSelectedDate(date)
+    if (selectedDentistId && date) {
+      loadAvailableTimeSlots(selectedDentistId, date)
+    }
+  }
+
+  const loadAvailableTimeSlots = (dentistId, date) => {
+    const dentistAvailability = availability.find(avail => 
+      avail.dentistId === parseInt(dentistId) && avail.date === date
+    )
+    
+    if (dentistAvailability) {
+      const availableSlots = dentistAvailability.timeSlots.filter(slot => slot.available === true)
+      setAvailableTimeSlots(availableSlots)
+    } else {
+      setAvailableTimeSlots([])
+    }
+  }
+
+  const resetForm = () => {
+    setSelectedDentistId('')
+    setSelectedDate('')
+    setAvailableTimeSlots([])
   }
 
   const handleStatusUpdate = async (id, status) => {
@@ -361,7 +413,7 @@ export default function Appointments() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900 flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-gray-400" />
-                      {new Date(appointment.date).toLocaleDateString()}
+                      {formatDateInClinicTimezone(appointment.date)}
                     </div>
                     <div className="text-sm text-gray-500 flex items-center gap-2">
                       <Clock className="h-4 w-4 text-gray-400" />
@@ -419,14 +471,15 @@ export default function Appointments() {
               const appointmentData = {
                 patient: formData.get('patientName'), // API expects 'patient'
                 phone: formData.get('patientPhone'), // API expects 'phone'
-                date: formData.get('date'),
-                time: formData.get('time'),
                 dentist_id: parseInt(formData.get('dentistId')), // API expects 'dentist_id'
+                appointment_date: formData.get('date'), // API expects 'appointment_date'
+                appointment_time: formData.get('time'), // API expects 'appointment_time'
                 treatment: formData.get('treatment'),
-                notes: formData.get('notes'),
-                status: 'pending'
+                status: 'confirmed', // API expects 'confirmed' as default
+                notes: formData.get('notes')
               }
               handleAddAppointment(appointmentData)
+              resetForm()
             }}>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Patient Name</label>
@@ -436,24 +489,52 @@ export default function Appointments() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
                 <input type="tel" name="patientPhone" required className="input-field" placeholder="Enter phone number" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                  <input type="date" name="date" required className="input-field" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
-                  <input type="time" name="time" required className="input-field" />
-                </div>
-              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Dentist</label>
-                <select name="dentistId" required className="input-field">
+                <select 
+                  name="dentistId" 
+                  required 
+                  className="input-field"
+                  value={selectedDentistId}
+                  onChange={(e) => handleDentistChange(e.target.value)}
+                >
                   <option value="">Select a dentist</option>
                   {dentists.map(dentist => (
                     <option key={dentist.id} value={dentist.id}>{dentist.name}</option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <input 
+                  type="date" 
+                  name="date" 
+                  required 
+                  className="input-field"
+                  value={selectedDate}
+                  onChange={(e) => handleDateChange(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Available Time Slots</label>
+                {availableTimeSlots.length > 0 ? (
+                  <select name="time" required className="input-field">
+                    <option value="">Select available time</option>
+                    {availableTimeSlots.map((slot, index) => (
+                      <option key={index} value={slot.start}>
+                        {slot.start} - {slot.end}
+                      </option>
+                    ))}
+                  </select>
+                ) : selectedDentistId && selectedDate ? (
+                  <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                    No available time slots for this dentist on the selected date
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500 bg-gray-50 p-2 rounded">
+                    Please select a dentist and date to see available time slots
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Treatment</label>
@@ -473,7 +554,10 @@ export default function Appointments() {
               <div className="flex justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowAddForm(false)}
+                  onClick={() => {
+                    setShowAddForm(false)
+                    resetForm()
+                  }}
                   className="btn-secondary"
                   disabled={submitting}
                 >

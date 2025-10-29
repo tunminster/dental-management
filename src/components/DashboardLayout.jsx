@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import ClickOutside from './ClickOutside'
+import TimezoneIndicator from './TimezoneIndicator'
 import { 
   LayoutDashboard, 
   Calendar, 
@@ -76,6 +77,9 @@ export default function DashboardLayout() {
               )
             })}
           </nav>
+          <div className="px-4 pb-4">
+            <TimezoneIndicator />
+          </div>
         </div>
       </div>
 
@@ -122,6 +126,7 @@ export default function DashboardLayout() {
           <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
             <div className="flex flex-1"></div>
             <div className="flex items-center gap-x-4 lg:gap-x-6">
+              <TimezoneIndicator />
               <button type="button" className="-m-2.5 p-2.5 text-gray-400 hover:text-gray-500">
                 <Bell className="h-6 w-6" />
               </button>
