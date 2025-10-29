@@ -366,10 +366,11 @@ export default function Patients() {
                 name: formData.get('name'),
                 email: formData.get('email'),
                 phone: formData.get('phone'),
-                dateOfBirth: formData.get('dateOfBirth'),
+                date_of_birth: formData.get('dateOfBirth'), // API expects snake_case
                 address: formData.get('address'),
-                emergencyContact: formData.get('emergencyContact'),
-                medicalHistory: formData.get('medicalHistory')
+                emergency_contact: formData.get('emergencyContact'), // API expects snake_case
+                medical_history: formData.get('medicalHistory'), // API expects snake_case
+                status: 'active' // Default status for new patients
               }
               handleAddPatient(patientData)
             }}>
@@ -438,10 +439,10 @@ export default function Patients() {
                 name: formData.get('name'),
                 email: formData.get('email'),
                 phone: formData.get('phone'),
-                dateOfBirth: formData.get('dateOfBirth'),
+                date_of_birth: formData.get('dateOfBirth'), // API expects snake_case
                 address: formData.get('address'),
-                emergencyContact: formData.get('emergencyContact'),
-                medicalHistory: formData.get('medicalHistory'),
+                emergency_contact: formData.get('emergencyContact'), // API expects snake_case
+                medical_history: formData.get('medicalHistory'), // API expects snake_case
                 status: formData.get('status')
               }
               handleUpdatePatient(editingPatient.id, patientData)
