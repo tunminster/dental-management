@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Calendar, Clock, User, Plus, Edit, Trash2, Save, X, Loader, AlertCircle } from 'lucide-react'
 import { availabilityAPI, dentistsAPI } from '../services/api'
+import { formatDateInClinicTimezone } from '../utils/timezone'
 
 const dentists = [
   { id: 1, name: 'Dr. Sarah Johnson', specialization: 'General Dentistry' },
@@ -214,6 +215,8 @@ export default function Availability() {
     return timeSlots.length
   }
 
+  // Using timezone utility for consistent clinic timezone display
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -307,7 +310,7 @@ export default function Availability() {
                   <div className="flex items-center gap-4 text-sm text-gray-500">
                     <div className="flex items-center gap-1">
                       <Calendar className="h-4 w-4" />
-                      {new Date(availability.date).toLocaleDateString()}
+                      {formatDateInClinicTimezone(availability.date)}
                     </div>
                     <div className="flex items-center gap-1">
                       <Clock className="h-4 w-4" />

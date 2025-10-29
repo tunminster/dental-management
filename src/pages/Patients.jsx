@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Search, Filter, User, Phone, Mail, Calendar, Edit, Trash2, Loader, AlertCircle } from 'lucide-react'
 import { patientsAPI } from '../services/api'
+import { formatDateInClinicTimezone } from '../utils/timezone'
 
 const patients = [
   {
@@ -291,7 +292,7 @@ export default function Patients() {
                       <div className="ml-4">
                         <div className="text-sm font-medium text-gray-900">{patient.name}</div>
                         <div className="text-sm text-gray-500">
-                          DOB: {patient.dateOfBirth ? new Date(patient.dateOfBirth).toLocaleDateString() : 'N/A'}
+                          DOB: {patient.dateOfBirth ? formatDateInClinicTimezone(patient.dateOfBirth) : 'N/A'}
                         </div>
                       </div>
                     </div>
@@ -309,13 +310,13 @@ export default function Patients() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900 flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-gray-400" />
-                      {patient.lastVisit ? new Date(patient.lastVisit).toLocaleDateString() : 'No visits yet'}
+                      {patient.lastVisit ? formatDateInClinicTimezone(patient.lastVisit) : 'No visits yet'}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">
                       {patient.nextAppointment ? 
-                        new Date(patient.nextAppointment).toLocaleDateString() : 
+                        formatDateInClinicTimezone(patient.nextAppointment) : 
                         <span className="text-gray-400">No appointment</span>
                       }
                     </div>
