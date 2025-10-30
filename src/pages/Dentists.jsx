@@ -128,15 +128,15 @@ export default function Dentists() {
         licenseNumber: dentist.license, // API uses 'license', UI expects 'licenseNumber'
         experience: `${dentist.years_of_experience} years`, // Convert to string format
         status: 'active', // Default status since API doesn't provide this
-        workingHours: {
-          // Create default working hours since API doesn't provide detailed schedule
+        workingHours: dentist.working_hours || {
+          // Fallback to default working hours if API doesn't provide working_hours
           monday: { start: '09:00', end: '17:00' },
           tuesday: { start: '09:00', end: '17:00' },
           wednesday: { start: '09:00', end: '17:00' },
           thursday: { start: '09:00', end: '17:00' },
           friday: { start: '09:00', end: '17:00' },
-          saturday: dentist.working_days.includes('6') ? { start: '09:00', end: '13:00' } : { start: '00:00', end: '00:00' },
-          sunday: dentist.working_days.includes('7') ? { start: '09:00', end: '13:00' } : { start: '00:00', end: '00:00' }
+          saturday: dentist.working_days && dentist.working_days.includes('6') ? { start: '09:00', end: '13:00' } : { start: '00:00', end: '00:00' },
+          sunday: dentist.working_days && dentist.working_days.includes('7') ? { start: '09:00', end: '13:00' } : { start: '00:00', end: '00:00' }
         }
       }))
       
@@ -353,42 +353,76 @@ export default function Dentists() {
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Add New Dentist</h3>
-            <form className="space-y-4">
+            <form className="space-y-4" onSubmit={async (e) => {
+              e.preventDefault()
+              const formData = new FormData(e.target)
+              
+              // Collect working hours
+              const workingHours = {}
+              const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+              days.forEach(day => {
+                const startTime = formData.get(`${day}_start`)
+                const endTime = formData.get(`${day}_end`)
+                workingHours[day] = {
+                  start: startTime || '00:00',
+                  end: endTime || '00:00'
+                }
+              })
+              
+              const dentistData = {
+                name: formData.get('name'),
+                email: formData.get('email'),
+                phone: formData.get('phone'),
+                license: formData.get('license'),
+                specialty: formData.get('specialty'),
+                years_of_experience: parseInt(formData.get('experience')),
+                working_days: formData.get('working_days'),
+                working_hours: workingHours
+              }
+              
+              await handleAddDentist(dentistData)
+              setShowAddForm(false)
+            }}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                  <input type="text" className="input-field" placeholder="Dr. John Smith" />
+                  <input type="text" name="name" required className="input-field" placeholder="Dr. John Smith" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                  <input type="email" className="input-field" placeholder="john.smith@dentalcare.com" />
+                  <input type="email" name="email" required className="input-field" placeholder="john.smith@dentalcare.com" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                  <input type="tel" className="input-field" placeholder="(555) 123-4567" />
+                  <input type="tel" name="phone" required className="input-field" placeholder="(555) 123-4567" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">License Number</label>
-                  <input type="text" className="input-field" placeholder="DENT123456" />
+                  <input type="text" name="license" required className="input-field" placeholder="DENT123456" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Specialization</label>
-                  <select className="input-field">
+                  <select name="specialty" required className="input-field">
+                    <option value="">Select specialization</option>
                     {specializations.map(spec => (
                       <option key={spec} value={spec}>{spec}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Experience</label>
-                  <input type="text" className="input-field" placeholder="5 years" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Experience (years)</label>
+                  <input type="number" name="experience" required min="0" className="input-field" placeholder="5" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Working Days</label>
+                  <input type="text" name="working_days" className="input-field" placeholder="5 days/week" />
                 </div>
               </div>
 
               <div>
                 <h4 className="text-md font-medium text-gray-900 mb-3">Working Hours</h4>
                 <div className="space-y-3">
-                  {Object.keys(dentists[0].workingHours).map(day => (
+                  {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => (
                     <div key={day} className="flex items-center gap-4">
                       <div className="w-20 text-sm font-medium text-gray-700 capitalize">
                         {day}
@@ -396,12 +430,14 @@ export default function Dentists() {
                       <div className="flex items-center gap-2">
                         <input
                           type="time"
+                          name={`${day}_start`}
                           className="input-field w-32"
                           placeholder="Start time"
                         />
                         <span className="text-gray-400">to</span>
                         <input
                           type="time"
+                          name={`${day}_end`}
                           className="input-field w-32"
                           placeholder="End time"
                         />
@@ -433,35 +469,68 @@ export default function Dentists() {
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Edit Dentist</h3>
-            <form className="space-y-4">
+            <form className="space-y-4" onSubmit={async (e) => {
+              e.preventDefault()
+              const formData = new FormData(e.target)
+              
+              // Collect working hours
+              const workingHours = {}
+              const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+              days.forEach(day => {
+                const startTime = formData.get(`${day}_start`)
+                const endTime = formData.get(`${day}_end`)
+                workingHours[day] = {
+                  start: startTime || '00:00',
+                  end: endTime || '00:00'
+                }
+              })
+              
+              const dentistData = {
+                name: formData.get('name'),
+                email: formData.get('email'),
+                phone: formData.get('phone'),
+                license: formData.get('license'),
+                specialty: formData.get('specialty'),
+                years_of_experience: parseInt(formData.get('experience')),
+                working_days: formData.get('working_days'),
+                working_hours: workingHours
+              }
+              
+              await handleUpdateDentist(selectedDentist.id, dentistData)
+              setSelectedDentist(null)
+            }}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                  <input type="text" defaultValue={selectedDentist.name} className="input-field" />
+                  <input type="text" name="name" defaultValue={selectedDentist.name} required className="input-field" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                  <input type="email" defaultValue={selectedDentist.email} className="input-field" />
+                  <input type="email" name="email" defaultValue={selectedDentist.email} required className="input-field" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                  <input type="tel" defaultValue={selectedDentist.phone} className="input-field" />
+                  <input type="tel" name="phone" defaultValue={selectedDentist.phone} required className="input-field" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">License Number</label>
-                  <input type="text" defaultValue={selectedDentist.licenseNumber} className="input-field" />
+                  <input type="text" name="license" defaultValue={selectedDentist.licenseNumber} required className="input-field" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Specialization</label>
-                  <select className="input-field" defaultValue={selectedDentist.specialization}>
+                  <select name="specialty" defaultValue={selectedDentist.specialization} required className="input-field">
                     {specializations.map(spec => (
                       <option key={spec} value={spec}>{spec}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Experience</label>
-                  <input type="text" defaultValue={selectedDentist.experience} className="input-field" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Experience (years)</label>
+                  <input type="number" name="experience" defaultValue={parseInt(selectedDentist.experience)} required min="0" className="input-field" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Working Days</label>
+                  <input type="text" name="working_days" defaultValue="5 days/week" className="input-field" />
                 </div>
               </div>
 
@@ -476,12 +545,14 @@ export default function Dentists() {
                       <div className="flex items-center gap-2">
                         <input
                           type="time"
+                          name={`${day}_start`}
                           defaultValue={hours.start}
                           className="input-field w-32"
                         />
                         <span className="text-gray-400">to</span>
                         <input
                           type="time"
+                          name={`${day}_end`}
                           defaultValue={hours.end}
                           className="input-field w-32"
                         />
