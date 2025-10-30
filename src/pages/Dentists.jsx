@@ -128,6 +128,8 @@ export default function Dentists() {
         licenseNumber: dentist.license, // API uses 'license', UI expects 'licenseNumber'
         experience: `${dentist.years_of_experience} years`, // Convert to string format
         status: 'active', // Default status since API doesn't provide this
+        // Prefer API provided working_days string if available
+        workingDays: dentist.working_days,
         workingHours: dentist.working_hours || {
           // Fallback to default working hours if API doesn't provide working_hours
           monday: { start: '09:00', end: '17:00' },
@@ -327,7 +329,7 @@ export default function Dentists() {
               </div>
               <div className="flex items-center text-sm text-gray-600">
                 <Calendar className="h-4 w-4 mr-2" />
-                {getWorkingDays(dentist.workingHours)}
+                {dentist.workingDays || getWorkingDays(dentist.workingHours)}
               </div>
             </div>
 
@@ -415,14 +417,14 @@ export default function Dentists() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Working Days</label>
-                  <input type="text" name="working_days" className="input-field" placeholder="5 days/week" />
+                  <input type="text" name="working_days" className="input-field" placeholder="e.g., 3 days/week" />
                 </div>
               </div>
 
               <div>
                 <h4 className="text-md font-medium text-gray-900 mb-3">Working Hours</h4>
                 <div className="space-y-3">
-                  {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => (
+                  {['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].map(day => (
                     <div key={day} className="flex items-center gap-4">
                       <div className="w-20 text-sm font-medium text-gray-700 capitalize">
                         {day}
@@ -530,35 +532,44 @@ export default function Dentists() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Working Days</label>
-                  <input type="text" name="working_days" defaultValue="5 days/week" className="input-field" />
+                  <input type="text" name="working_days" defaultValue={selectedDentist.workingDays || getWorkingDays(selectedDentist.workingHours)} className="input-field" />
                 </div>
               </div>
 
               <div>
                 <h4 className="text-md font-medium text-gray-900 mb-3">Working Hours</h4>
                 <div className="space-y-3">
-                  {Object.entries(selectedDentist.workingHours).map(([day, hours]) => (
-                    <div key={day} className="flex items-center gap-4">
-                      <div className="w-20 text-sm font-medium text-gray-700 capitalize">
-                        {day}
+                  {['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].map(day => {
+                    const hours = selectedDentist.workingHours?.[day] || { start: '00:00', end: '00:00' }
+                    const isOff = (hours?.start === '00:00' && hours?.end === '00:00')
+                    return (
+                      <div key={day} className="flex items-center gap-4">
+                        <div className="w-20 text-sm font-medium text-gray-700 capitalize">
+                          {day}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="time"
+                            name={`${day}_start`}
+                            defaultValue={isOff ? '' : hours.start}
+                            placeholder={isOff ? 'Off' : 'Start time'}
+                            className="input-field w-32"
+                          />
+                          <span className="text-gray-400">to</span>
+                          <input
+                            type="time"
+                            name={`${day}_end`}
+                            defaultValue={isOff ? '' : hours.end}
+                            placeholder={isOff ? 'Off' : 'End time'}
+                            className="input-field w-32"
+                          />
+                          {isOff && (
+                            <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">Off</span>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="time"
-                          name={`${day}_start`}
-                          defaultValue={hours.start}
-                          className="input-field w-32"
-                        />
-                        <span className="text-gray-400">to</span>
-                        <input
-                          type="time"
-                          name={`${day}_end`}
-                          defaultValue={hours.end}
-                          className="input-field w-32"
-                        />
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
 
