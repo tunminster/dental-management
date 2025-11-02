@@ -66,6 +66,13 @@ export default function Availability() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingAvailability, setEditingAvailability] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+  
+  // Form state for adding availability
+  const [formDentistId, setFormDentistId] = useState('')
+  const [formDate, setFormDate] = useState('')
+  const [formTimeSlots, setFormTimeSlots] = useState([])
+  const [selectedDentistDetails, setSelectedDentistDetails] = useState(null)
+  const [loadingDentistDetails, setLoadingDentistDetails] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -119,22 +126,34 @@ export default function Availability() {
       setSubmitting(true)
       const response = await availabilityAPI.create(availabilityData)
       
+      console.log('Add availability API response:', response)
+      
+      // Handle API response - could be nested in data property
+      const availability = response?.data || response
+      
+      // Find dentist name from dentists list if not provided by API
+      const dentistId = availability.dentist_id || availability.dentistId
+      const dentist = dentists.find(d => d.id === dentistId)
+      const dentistName = availability.dentist_name || availability.dentistName || dentist?.name || `Dentist ${dentistId}`
+      
       // Normalize the response data
       const normalizedResponse = {
-        id: response.id,
-        dentistId: response.dentist_id || response.dentistId,
-        dentistName: response.dentist_name || response.dentistName,
-        date: response.date,
-        timeSlots: response.time_slots || response.timeSlots || [],
-        createdAt: response.created_at,
-        updatedAt: response.updated_at
+        id: availability.id,
+        dentistId: dentistId,
+        dentistName: dentistName,
+        date: availability.date,
+        timeSlots: availability.time_slots || availability.timeSlots || [],
+        createdAt: availability.created_at,
+        updatedAt: availability.updated_at
       }
       
+      console.log('Normalized availability response:', normalizedResponse)
+      
       setAvailabilityData(prev => [...prev, normalizedResponse])
-      setShowAddForm(false)
       setError('')
     } catch (error) {
-      setError(error.message)
+      console.error('Error adding availability:', error)
+      setError(error.message || 'Failed to add availability')
     } finally {
       setSubmitting(false)
     }
@@ -144,21 +163,26 @@ export default function Availability() {
     try {
       const response = await availabilityAPI.update(id, availabilityData)
       
+      // Handle API response - could be nested in data property
+      const availability = response?.data || response
+      
       // Normalize the response data
       const normalizedResponse = {
-        id: response.id,
-        dentistId: response.dentist_id || response.dentistId,
-        dentistName: response.dentist_name || response.dentistName,
-        date: response.date,
-        timeSlots: response.time_slots || response.timeSlots || [],
-        createdAt: response.created_at,
-        updatedAt: response.updated_at
+        id: availability.id,
+        dentistId: availability.dentist_id || availability.dentistId,
+        dentistName: availability.dentist_name || availability.dentistName,
+        date: availability.date,
+        timeSlots: availability.time_slots || availability.timeSlots || [],
+        createdAt: availability.created_at,
+        updatedAt: availability.updated_at
       }
       
       setAvailabilityData(prev => prev.map(avail => avail.id === id ? normalizedResponse : avail))
       setEditingAvailability(null)
+      setError('')
     } catch (error) {
-      setError(error.message)
+      console.error('Error updating availability:', error)
+      setError(error.message || 'Failed to update availability')
     }
   }
 
@@ -173,17 +197,23 @@ export default function Availability() {
 
   const handleAddFormSubmit = async (e) => {
     e.preventDefault()
-    const formData = new FormData(e.target)
+    setError('')
     
-    const availabilityData = {
-      dentist_id: parseInt(formData.get('dentist')),
-      date: formData.get('date'),
-      time_slots: [
-        { start: formData.get('startTime'), end: formData.get('endTime'), available: true }
-      ]
+    // Validate required fields
+    if (!formDentistId || !formDate || formTimeSlots.length === 0) {
+      setError('Please select a dentist, date, and add at least one time slot')
+      return
     }
     
+    const availabilityData = {
+      dentist_id: parseInt(formDentistId),
+      date: formDate,
+      time_slots: formTimeSlots
+    }
+    
+    console.log('Submitting availability data:', availabilityData)
     await handleAddAvailability(availabilityData)
+    resetAddForm()
   }
 
   const handleEditFormSubmit = async (e) => {
@@ -215,6 +245,129 @@ export default function Availability() {
     return timeSlots.length
   }
 
+  // Get day of week from date (0 = Sunday, 1 = Monday, etc.)
+  const getDayOfWeek = (dateString) => {
+    // Parse date string (YYYY-MM-DD format) as local date to avoid timezone issues
+    const [year, month, day] = dateString.split('-').map(Number)
+    const date = new Date(year, month - 1, day) // month is 0-indexed in Date constructor
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+    return days[date.getDay()]
+  }
+
+  // Generate time slots from working hours
+  const generateTimeSlotsFromWorkingHours = (workingHours, dayOfWeek) => {
+    const dayHours = workingHours?.[dayOfWeek]
+    if (!dayHours || !dayHours.start || !dayHours.end || dayHours.start === '00:00') {
+      return []
+    }
+
+    const slots = []
+    const start = dayHours.start
+    const end = dayHours.end
+    
+    // Convert time strings to minutes for easier calculation
+    const timeToMinutes = (timeStr) => {
+      const [hours, minutes] = timeStr.split(':').map(Number)
+      return hours * 60 + minutes
+    }
+
+    const minutesToTime = (minutes) => {
+      const hours = Math.floor(minutes / 60)
+      const mins = minutes % 60
+      return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`
+    }
+
+    const startMinutes = timeToMinutes(start)
+    const endMinutes = timeToMinutes(end)
+    const slotDuration = 60 // 1 hour slots
+
+    // Generate hourly slots
+    for (let time = startMinutes; time + slotDuration <= endMinutes; time += slotDuration) {
+      slots.push({
+        start: minutesToTime(time),
+        end: minutesToTime(time + slotDuration),
+        available: true
+      })
+    }
+
+    return slots
+  }
+
+  // Fetch dentist details
+  const fetchDentistDetails = async (dentistId) => {
+    if (!dentistId) {
+      setSelectedDentistDetails(null)
+      setFormTimeSlots([])
+      return
+    }
+
+    try {
+      setLoadingDentistDetails(true)
+      const response = await dentistsAPI.getById(dentistId)
+      const dentist = response?.data || response
+      setSelectedDentistDetails(dentist)
+      
+      // If date is selected, generate slots from working hours
+      if (formDate) {
+        const dayOfWeek = getDayOfWeek(formDate)
+        const slots = generateTimeSlotsFromWorkingHours(dentist.working_hours, dayOfWeek)
+        setFormTimeSlots(slots)
+      } else {
+        // Clear slots if no date is selected
+        setFormTimeSlots([])
+      }
+    } catch (error) {
+      console.error('Error fetching dentist details:', error)
+      setError('Failed to load dentist details')
+    } finally {
+      setLoadingDentistDetails(false)
+    }
+  }
+
+  // Handle dentist change in form
+  const handleFormDentistChange = (dentistId) => {
+    setFormDentistId(dentistId)
+    fetchDentistDetails(dentistId)
+  }
+
+  // Handle date change in form
+  const handleFormDateChange = (date) => {
+    setFormDate(date)
+    
+    // If dentist is selected, regenerate slots based on the day of week
+    if (selectedDentistDetails && date) {
+      const dayOfWeek = getDayOfWeek(date)
+      const slots = generateTimeSlotsFromWorkingHours(selectedDentistDetails.working_hours, dayOfWeek)
+      setFormTimeSlots(slots)
+    }
+  }
+
+  // Add new time slot
+  const handleAddTimeSlot = () => {
+    setFormTimeSlots(prev => [...prev, { start: '09:00', end: '10:00', available: true }])
+  }
+
+  // Update time slot
+  const handleUpdateTimeSlot = (index, field, value) => {
+    setFormTimeSlots(prev => prev.map((slot, i) => 
+      i === index ? { ...slot, [field]: value } : slot
+    ))
+  }
+
+  // Remove time slot
+  const handleRemoveTimeSlot = (index) => {
+    setFormTimeSlots(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Reset form
+  const resetAddForm = () => {
+    setFormDentistId('')
+    setFormDate('')
+    setFormTimeSlots([])
+    setSelectedDentistDetails(null)
+    setShowAddForm(false)
+  }
+
   // Using timezone utility for consistent clinic timezone display
 
   if (loading) {
@@ -236,7 +389,13 @@ export default function Availability() {
           <p className="text-gray-600">Manage dentist availability and time slots</p>
         </div>
         <button
-          onClick={() => setShowAddForm(true)}
+          onClick={() => {
+            setShowAddForm(true)
+            setFormDentistId('')
+            setFormDate('')
+            setFormTimeSlots([])
+            setSelectedDentistDetails(null)
+          }}
           className="btn-primary flex items-center gap-2"
         >
           <Plus className="h-4 w-4" />
@@ -365,7 +524,12 @@ export default function Availability() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Dentist</label>
-                  <select name="dentist" className="input-field" required>
+                  <select 
+                    value={formDentistId}
+                    onChange={(e) => handleFormDentistChange(e.target.value)}
+                    className="input-field" 
+                    required
+                  >
                     <option value="">Select a dentist</option>
                     {dentists.map(dentist => (
                       <option key={dentist.id} value={dentist.id}>{dentist.name}</option>
@@ -374,50 +538,113 @@ export default function Availability() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                  <input name="date" type="date" className="input-field" required />
+                  <input 
+                    type="date" 
+                    value={formDate}
+                    onChange={(e) => handleFormDateChange(e.target.value)}
+                    className="input-field" 
+                    required 
+                  />
                 </div>
               </div>
+
+              {loadingDentistDetails && (
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <Loader className="h-4 w-4 animate-spin" />
+                  Loading dentist working hours...
+                </div>
+              )}
+
+              {formDate && selectedDentistDetails && !loadingDentistDetails && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-sm text-blue-800">
+                    Working hours for {getDayOfWeek(formDate)}: {(() => {
+                      const dayHours = selectedDentistDetails.working_hours?.[getDayOfWeek(formDate)]
+                      if (!dayHours || !dayHours.start || dayHours.start === '00:00') {
+                        return 'No working hours on this day'
+                      }
+                      return `${dayHours.start} - ${dayHours.end}`
+                    })()}
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">Time Slots</label>
                 <div className="space-y-3">
-                  <div className="flex items-center gap-4">
-                    <div className="flex-1">
-                      <input name="startTime" type="time" className="input-field" placeholder="Start time" required />
-                    </div>
-                    <span className="text-gray-400">to</span>
-                    <div className="flex-1">
-                      <input name="endTime" type="time" className="input-field" placeholder="End time" required />
-                    </div>
-                    <button type="button" className="btn-secondary">
-                      <Plus className="h-4 w-4" />
-                    </button>
-                  </div>
+                  {/* Add new time slot button */}
+                  <button
+                    type="button"
+                    onClick={handleAddTimeSlot}
+                    className="btn-secondary flex items-center gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Time Slot
+                  </button>
                   
-                  {/* Sample time slots */}
-                  <div className="grid grid-cols-2 gap-2">
-                    {['09:00-10:00', '10:00-11:00', '11:00-12:00', '14:00-15:00', '15:00-16:00', '16:00-17:00'].map((slot, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
-                        <span className="text-sm">{slot}</span>
-                        <button type="button" className="text-red-600 hover:text-red-900">
-                          <X className="h-4 w-4" />
-                        </button>
+                  {/* Dynamic time slots list */}
+                  <div className="space-y-2">
+                    {formTimeSlots.map((slot, index) => (
+                      <div key={index} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                        <div className="flex-1 flex items-center gap-2">
+                          <input
+                            type="time"
+                            value={slot.start}
+                            onChange={(e) => handleUpdateTimeSlot(index, 'start', e.target.value)}
+                            className="input-field"
+                            required
+                          />
+                          <span className="text-gray-400">to</span>
+                          <input
+                            type="time"
+                            value={slot.end}
+                            onChange={(e) => handleUpdateTimeSlot(index, 'end', e.target.value)}
+                            className="input-field"
+                            required
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={slot.available}
+                              onChange={(e) => handleUpdateTimeSlot(index, 'available', e.target.checked)}
+                              className="rounded"
+                            />
+                            <span className="text-gray-700">Available</span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveTimeSlot(index)}
+                            className="text-red-600 hover:text-red-900 p-1"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
+
+                  {formTimeSlots.length === 0 && (
+                    <p className="text-sm text-gray-500 text-center py-4">
+                      {formDate && formDentistId 
+                        ? 'No working hours for this day. Click "Add Time Slot" to create custom slots.'
+                        : 'Select a dentist and date to see available time slots, or add custom slots.'}
+                    </p>
+                  )}
                 </div>
               </div>
 
               <div className="flex justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowAddForm(false)}
+                  onClick={resetAddForm}
                   className="btn-secondary"
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary">
-                  Add Availability
+                <button type="submit" className="btn-primary" disabled={submitting}>
+                  {submitting ? 'Adding...' : 'Add Availability'}
                 </button>
               </div>
             </form>
