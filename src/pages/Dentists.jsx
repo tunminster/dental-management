@@ -158,7 +158,37 @@ export default function Dentists() {
     try {
       setSubmitting(true)
       const response = await dentistsAPI.create(dentistData)
-      setDentists(prev => [...prev, response])
+      
+      // Handle API response and normalize data structure
+      const dentist = response?.data || response
+      
+      // Normalize the response to match UI expectations
+      const workingHours = dentist.working_hours || dentist.workingHours || {
+        // Fallback to default working hours if API doesn't provide working_hours
+        monday: { start: '09:00', end: '17:00' },
+        tuesday: { start: '09:00', end: '17:00' },
+        wednesday: { start: '09:00', end: '17:00' },
+        thursday: { start: '09:00', end: '17:00' },
+        friday: { start: '09:00', end: '17:00' },
+        saturday: dentist.working_days && dentist.working_days.includes('6') ? { start: '09:00', end: '13:00' } : { start: '00:00', end: '00:00' },
+        sunday: dentist.working_days && dentist.working_days.includes('7') ? { start: '09:00', end: '13:00' } : { start: '00:00', end: '00:00' }
+      }
+      
+      const normalizedDentist = {
+        id: dentist.id,
+        name: dentist.name,
+        email: dentist.email,
+        phone: dentist.phone,
+        specialization: dentist.specialty || dentist.specialization, // API uses 'specialty', UI expects 'specialization'
+        licenseNumber: dentist.license || dentist.licenseNumber, // API uses 'license', UI expects 'licenseNumber'
+        experience: dentist.years_of_experience ? `${dentist.years_of_experience} years` : dentist.experience, // Convert to string format
+        status: dentist.status || 'active', // Default status since API might not provide this
+        // Prefer API provided working_days string if available, otherwise calculate from working_hours
+        workingDays: dentist.working_days || getWorkingDays(workingHours),
+        workingHours: workingHours
+      }
+      
+      setDentists(prev => [...prev, normalizedDentist])
       setShowAddForm(false)
       setError('')
     } catch (error) {
@@ -171,7 +201,37 @@ export default function Dentists() {
   const handleUpdateDentist = async (id, dentistData) => {
     try {
       const response = await dentistsAPI.update(id, dentistData)
-      setDentists(prev => prev.map(dentist => dentist.id === id ? response : dentist))
+      
+      // Handle API response and normalize data structure
+      const dentist = response?.data || response
+      
+      // Normalize the response to match UI expectations
+      const workingHours = dentist.working_hours || dentist.workingHours || {
+        // Fallback to default working hours if API doesn't provide working_hours
+        monday: { start: '09:00', end: '17:00' },
+        tuesday: { start: '09:00', end: '17:00' },
+        wednesday: { start: '09:00', end: '17:00' },
+        thursday: { start: '09:00', end: '17:00' },
+        friday: { start: '09:00', end: '17:00' },
+        saturday: dentist.working_days && dentist.working_days.includes('6') ? { start: '09:00', end: '13:00' } : { start: '00:00', end: '00:00' },
+        sunday: dentist.working_days && dentist.working_days.includes('7') ? { start: '09:00', end: '13:00' } : { start: '00:00', end: '00:00' }
+      }
+      
+      const normalizedDentist = {
+        id: dentist.id,
+        name: dentist.name,
+        email: dentist.email,
+        phone: dentist.phone,
+        specialization: dentist.specialty || dentist.specialization, // API uses 'specialty', UI expects 'specialization'
+        licenseNumber: dentist.license || dentist.licenseNumber, // API uses 'license', UI expects 'licenseNumber'
+        experience: dentist.years_of_experience ? `${dentist.years_of_experience} years` : dentist.experience, // Convert to string format
+        status: dentist.status || 'active', // Default status since API might not provide this
+        // Prefer API provided working_days string if available, otherwise calculate from working_hours
+        workingDays: dentist.working_days || getWorkingDays(workingHours),
+        workingHours: workingHours
+      }
+      
+      setDentists(prev => prev.map(dentist => dentist.id === id ? normalizedDentist : dentist))
       setSelectedDentist(null)
     } catch (error) {
       setError(error.message)
