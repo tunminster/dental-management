@@ -141,7 +141,9 @@ export const appointmentsAPI = {
 
   updateStatus: async (id, status) => {
     try {
-      const response = await apiClient.patch(`/api/appointments/${id}/status`, { status })
+      const response = await apiClient.put(`/api/appointments/${id}/status`, null, {
+        params: { status }
+      })
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to update appointment status')
