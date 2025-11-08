@@ -75,9 +75,24 @@ const appointments = [
 
 const statusColors = {
   confirmed: 'bg-green-100 text-green-800',
-  pending: 'bg-yellow-100 text-yellow-800',
+  rescheduled: 'bg-yellow-100 text-yellow-800',
   cancelled: 'bg-red-100 text-red-800',
-  completed: 'bg-blue-100 text-blue-800'
+  completed: 'bg-blue-100 text-blue-800',
+  arrived: 'bg-indigo-100 text-indigo-800',
+  no_show: 'bg-orange-100 text-orange-800'
+}
+
+const statusOptions = [
+  { value: 'confirmed', label: 'Confirmed' },
+  { value: 'arrived', label: 'Arrived' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'no_show', label: 'No-show' },
+  { value: 'cancelled', label: 'Cancelled' },
+  { value: 'rescheduled', label: 'Rescheduled' }
+]
+
+const getStatusLabel = (status) => {
+  return statusOptions.find(option => option.value === status)?.label || status
 }
 
 export default function Appointments() {
@@ -94,6 +109,7 @@ export default function Appointments() {
   const [selectedDentistId, setSelectedDentistId] = useState('')
   const [selectedDate, setSelectedDate] = useState('')
   const [availableTimeSlots, setAvailableTimeSlots] = useState([])
+  const [statusUpdatingId, setStatusUpdatingId] = useState(null)
 
   useEffect(() => {
     loadData()
@@ -261,11 +277,30 @@ export default function Appointments() {
   }
 
   const handleStatusUpdate = async (id, status) => {
+    if (!status) return
+    setStatusUpdatingId(id)
     try {
       const response = await appointmentsAPI.updateStatus(id, status)
-      setAppointments(prev => prev.map(apt => apt.id === id ? response : apt))
+      const normalizedResponse = {
+        id: response.id,
+        patient: response.patient,
+        phone: response.phone,
+        dentistId: response.dentist_id || response.dentistId,
+        dentistName: response.dentist_name || response.dentistName,
+        date: response.appointment_date || response.date,
+        time: response.appointment_time || response.time,
+        treatment: response.treatment,
+        status: response.status,
+        notes: response.notes,
+        createdAt: response.created_at,
+        updatedAt: response.updated_at
+      }
+      setAppointments(prev => prev.map(apt => apt.id === id ? normalizedResponse : apt))
+      setError('')
     } catch (error) {
       setError(error.message)
+    } finally {
+      setStatusUpdatingId(null)
     }
   }
 
@@ -340,10 +375,9 @@ export default function Appointments() {
               className="input-field"
             >
               <option value="all">All Status</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="pending">Pending</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="completed">Completed</option>
+              {statusOptions.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
             </select>
             <select
               value={dentistFilter}
@@ -425,29 +459,33 @@ export default function Appointments() {
                     <div className="text-sm text-gray-500">{appointment.notes}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColors[appointment.status]}`}>
-                      {appointment.status}
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColors[appointment.status] || 'bg-gray-100 text-gray-800'}`}>
+                      {getStatusLabel(appointment.status)}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => handleStatusUpdate(appointment.id, 'confirmed')}
-                        className="text-green-600 hover:text-green-900"
-                        disabled={appointment.status === 'confirmed'}
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <select
+                        value={appointment.status}
+                        onChange={(e) => {
+                          const nextStatus = e.target.value
+                          if (nextStatus !== appointment.status) {
+                            handleStatusUpdate(appointment.id, nextStatus)
+                          }
+                        }}
+                        className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-700 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        disabled={statusUpdatingId === appointment.id}
                       >
-                        Confirm
-                      </button>
-                      <button 
-                        onClick={() => handleStatusUpdate(appointment.id, 'cancelled')}
-                        className="text-red-600 hover:text-red-900"
-                        disabled={appointment.status === 'cancelled'}
-                      >
-                        Cancel
-                      </button>
-                      <button 
+                        {statusOptions.map(option => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
                         onClick={() => handleDeleteAppointment(appointment.id)}
                         className="text-gray-600 hover:text-gray-900"
+                        disabled={statusUpdatingId === appointment.id}
                       >
                         Delete
                       </button>
