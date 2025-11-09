@@ -83,7 +83,7 @@ const safeMatch = (value, comparator) => {
   return (value ?? '').toString().toLowerCase().includes(comparator)
 }
 
-const ITEMS_PER_PAGE = 10
+const DEFAULT_PAGE_SIZE = 10
 
 const getStatusRank = (status) => {
   if (!status) return 0
@@ -101,6 +101,75 @@ const getDateValue = (date, time) => {
   return parsed
 }
 
+const extractAppointmentsPayload = (payload) => {
+  if (!payload) {
+    return {
+      data: [],
+      page: 1,
+      pageSize: DEFAULT_PAGE_SIZE,
+      total: 0,
+      totalPages: 1
+    }
+  }
+
+  if (Array.isArray(payload)) {
+    return {
+      data: payload,
+      page: 1,
+      pageSize: payload.length || DEFAULT_PAGE_SIZE,
+      total: payload.length,
+      totalPages: 1
+    }
+  }
+
+  const meta = payload.meta || payload.pagination || {}
+
+  const dataArray = Array.isArray(payload.data)
+    ? payload.data
+    : Array.isArray(payload.results)
+    ? payload.results
+    : Array.isArray(payload.items)
+    ? payload.items
+    : Array.isArray(payload.records)
+    ? payload.records
+    : Array.isArray(payload.appointments)
+    ? payload.appointments
+    : []
+
+  const page = payload.page ?? payload.current_page ?? meta.page ?? meta.current_page ?? 1
+  const pageSize =
+    payload.page_size ??
+    payload.pageSize ??
+    payload.per_page ??
+    meta.page_size ??
+    meta.pageSize ??
+    meta.per_page ??
+    (dataArray.length || DEFAULT_PAGE_SIZE)
+  const total =
+    payload.total ??
+    payload.total_items ??
+    payload.total_count ??
+    payload.count ??
+    meta.total ??
+    meta.total_items ??
+    meta.total_count ??
+    dataArray.length
+  const totalPages =
+    payload.total_pages ??
+    payload.totalPages ??
+    meta.total_pages ??
+    meta.totalPages ??
+    (pageSize ? Math.ceil(total / pageSize) : 1)
+
+  return {
+    data: dataArray,
+    page,
+    pageSize,
+    total,
+    totalPages
+  }
+}
+
 export default function Appointments() {
   const [appointments, setAppointments] = useState([])
   const [dentists, setDentists] = useState([])
@@ -116,65 +185,128 @@ export default function Appointments() {
   const [selectedDate, setSelectedDate] = useState('')
   const [availableTimeSlots, setAvailableTimeSlots] = useState([])
   const [statusUpdatingId, setStatusUpdatingId] = useState(null)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalItems, setTotalItems] = useState(0)
+  const [reloadToken, setReloadToken] = useState(0)
 
   useEffect(() => {
-    loadData()
+    setCurrentPage(prev => (prev === 1 ? prev : 1))
+  }, [searchTerm, statusFilter, dentistFilter])
+
+  useEffect(() => {
+    const fetchReferenceData = async () => {
+      try {
+        const [dentistsResponse, availabilityResponse] = await Promise.all([
+          dentistsAPI.getAll(),
+          availabilityAPI.getAll()
+        ])
+
+        const dentistsData = Array.isArray(dentistsResponse?.data) ? dentistsResponse.data :
+                            Array.isArray(dentistsResponse) ? dentistsResponse : []
+
+        const normalizedDentists = dentistsData.map(dentist => ({
+          id: dentist.id,
+          name: dentist.name,
+          specialization: dentist.specialty
+        }))
+        setDentists(normalizedDentists)
+
+        const availabilityData = Array.isArray(availabilityResponse?.data) ? availabilityResponse.data :
+                                Array.isArray(availabilityResponse) ? availabilityResponse : []
+
+        const normalizedAvailability = availabilityData.map(avail => ({
+          id: avail.id,
+          dentistId: avail.dentist_id,
+          dentistName: avail.dentist_name,
+          date: avail.date,
+          timeSlots: avail.time_slots || []
+        }))
+
+        setAvailability(normalizedAvailability)
+      } catch (error) {
+        setError(prev => prev || error.message)
+      }
+    }
+
+    fetchReferenceData()
   }, [])
 
   useEffect(() => {
-    setCurrentPage(1)
-  }, [searchTerm, statusFilter, dentistFilter, appointments.length])
+    let abort = false
 
-  const loadData = async () => {
-    try {
-      setLoading(true)
-      const [appointmentsResponse, dentistsResponse, availabilityResponse] = await Promise.all([
-        appointmentsAPI.getAll(),
-        dentistsAPI.getAll(),
-        availabilityAPI.getAll()
-      ])
-      
-      // Normalize appointments data to match UI expectations
-      const appointmentsData = Array.isArray(appointmentsResponse?.data) ? appointmentsResponse.data : 
-                               Array.isArray(appointmentsResponse) ? appointmentsResponse : []
-      
-      const normalizedAppointments = appointmentsData.map(appointment => normalizeAppointment(appointment))
-      
-      console.log('Normalized appointments data:', normalizedAppointments)
-      setAppointments(normalizedAppointments)
-      
-      // Normalize dentist data to match UI expectations
-      const dentistsData = Array.isArray(dentistsResponse?.data) ? dentistsResponse.data : 
-                          Array.isArray(dentistsResponse) ? dentistsResponse : []
-      
-      const normalizedDentists = dentistsData.map(dentist => ({
-        id: dentist.id,
-        name: dentist.name,
-        specialization: dentist.specialty // API uses 'specialty', UI expects 'specialization'
-      }))
-      
-      setDentists(normalizedDentists)
-      
-      // Normalize availability data
-      const availabilityData = Array.isArray(availabilityResponse?.data) ? availabilityResponse.data : 
-                              Array.isArray(availabilityResponse) ? availabilityResponse : []
-      
-      const normalizedAvailability = availabilityData.map(avail => ({
-        id: avail.id,
-        dentistId: avail.dentist_id,
-        dentistName: avail.dentist_name,
-        date: avail.date,
-        timeSlots: avail.time_slots || []
-      }))
-      
-      setAvailability(normalizedAvailability)
-    } catch (error) {
-      setError(error.message)
-    } finally {
-      setLoading(false)
+    const fetchAppointments = async () => {
+      try {
+        setLoading(true)
+        const searchQuery = searchTerm.trim()
+        const params = {
+          page: currentPage,
+          page_size: pageSize
+        }
+
+        if (statusFilter !== 'all') {
+          params.status = statusFilter
+        }
+
+        if (dentistFilter !== 'all') {
+          params.dentist_id = Number(dentistFilter)
+        }
+
+        if (searchQuery) {
+          params.patient = searchQuery
+          params.treatment = searchQuery
+        }
+
+        const appointmentsResponse = await appointmentsAPI.getAll(params)
+        if (abort) return
+
+        const {
+          data: appointmentsData,
+          page,
+          pageSize: serverPageSize,
+          total,
+          totalPages: serverTotalPages
+        } = extractAppointmentsPayload(appointmentsResponse)
+
+        const normalizedAppointments = appointmentsData.map(appointment => normalizeAppointment(appointment))
+        setAppointments(normalizedAppointments)
+        setTotalItems(total ?? normalizedAppointments.length)
+
+        const safeTotalPages = Math.max(1, serverTotalPages || 1)
+        setTotalPages(safeTotalPages)
+
+        if (serverPageSize && serverPageSize !== pageSize) {
+          setPageSize(serverPageSize)
+        }
+
+        if (page && page !== currentPage) {
+          setCurrentPage(page)
+        } else if (currentPage > safeTotalPages) {
+          setCurrentPage(safeTotalPages)
+        }
+
+        setError('')
+      } catch (error) {
+        if (!abort) {
+          setError(error.message)
+          setAppointments([])
+          setTotalItems(0)
+          setTotalPages(1)
+        }
+      } finally {
+        if (!abort) {
+          setLoading(false)
+        }
+      }
     }
-  }
+
+    fetchAppointments()
+
+    return () => {
+      abort = true
+    }
+  }, [currentPage, dentistFilter, pageSize, reloadToken, searchTerm, statusFilter])
 
   const handleAddAppointment = async (appointmentData) => {
     try {
@@ -200,6 +332,7 @@ export default function Appointments() {
       setAppointments(prev => [...prev, normalizedResponse])
       setShowAddForm(false)
       setError('')
+      setReloadToken(prev => prev + 1)
     } catch (error) {
       setError(error.message)
     } finally {
@@ -223,6 +356,7 @@ export default function Appointments() {
         }
         return normalizeAppointment(response, fallbackAppointment)
       }))
+      setReloadToken(prev => prev + 1)
     } catch (error) {
       setError(error.message)
     }
@@ -232,6 +366,7 @@ export default function Appointments() {
     try {
       await appointmentsAPI.delete(id)
       setAppointments(prev => prev.filter(apt => apt.id !== id))
+      setReloadToken(prev => prev + 1)
     } catch (error) {
       setError(error.message)
     }
@@ -283,6 +418,7 @@ export default function Appointments() {
         return normalizedResponse
       }))
       setError('')
+      setReloadToken(prev => prev + 1)
     } catch (error) {
       setError(error.message)
     } finally {
@@ -317,17 +453,10 @@ export default function Appointments() {
     return (a.patient || '').localeCompare(b.patient || '')
   })
 
-  const totalAppointments = sortedAppointments.length
-  const totalPages = Math.max(1, Math.ceil(totalAppointments / ITEMS_PER_PAGE))
-
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages)
-    }
-  }, [currentPage, totalPages])
-
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
-  const paginatedAppointments = sortedAppointments.slice(startIndex, startIndex + ITEMS_PER_PAGE)
+  const visibleAppointments = sortedAppointments
+  const safeTotalPages = Math.max(1, totalPages)
+  const startItemIndex = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1
+  const endItemIndex = totalItems === 0 ? 0 : Math.min(startItemIndex + visibleAppointments.length - 1, totalItems)
 
   if (loading) {
     return (
@@ -440,7 +569,7 @@ export default function Appointments() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {paginatedAppointments.map((appointment) => (
+              {visibleAppointments.map((appointment) => (
                 <tr key={appointment.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
@@ -514,15 +643,12 @@ export default function Appointments() {
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mt-4">
           <p className="text-sm text-gray-600">
-            Showing{' '}
-            {totalAppointments === 0
-              ? '0'
-              : `${startIndex + 1}-${Math.min(startIndex + ITEMS_PER_PAGE, totalAppointments)}`} of {totalAppointments} appointments
+            Showing {totalItems === 0 ? '0' : `${startItemIndex}-${endItemIndex}`} of {totalItems} appointments
           </p>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-              disabled={currentPage === 1}
+              disabled={currentPage <= 1}
               className="btn-secondary px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Previous
@@ -530,12 +656,12 @@ export default function Appointments() {
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-600">Page</span>
               <span className="text-sm font-medium text-gray-900">
-                {currentPage} / {totalPages}
+                {currentPage} / {safeTotalPages}
               </span>
             </div>
             <button
-              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-              disabled={currentPage === totalPages || totalAppointments === 0}
+              onClick={() => setCurrentPage((prev) => Math.min(safeTotalPages, prev + 1))}
+              disabled={currentPage >= safeTotalPages || totalItems === 0}
               className="btn-secondary px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Next
