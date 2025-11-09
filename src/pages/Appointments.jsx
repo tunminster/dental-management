@@ -3,76 +3,6 @@ import { Plus, Search, Filter, Calendar, Clock, User, Phone, AlertCircle, Loader
 import { appointmentsAPI, dentistsAPI, availabilityAPI } from '../services/api'
 import { formatDateInClinicTimezone } from '../utils/timezone'
 
-const dentists = [
-  { id: 1, name: 'Dr. Sarah Johnson', specialization: 'General Dentistry' },
-  { id: 2, name: 'Dr. Michael Chen', specialization: 'Orthodontics' },
-  { id: 3, name: 'Dr. Emily Rodriguez', specialization: 'Oral Surgery' },
-  { id: 4, name: 'Dr. James Wilson', specialization: 'Pediatric Dentistry' }
-]
-
-const appointments = [
-  {
-    id: 1,
-    patient: 'John Smith',
-    phone: '(555) 123-4567',
-    dentistId: 1,
-    dentistName: 'Dr. Sarah Johnson',
-    date: '2025-10-25',
-    time: '09:00',
-    treatment: 'Regular Cleaning',
-    status: 'confirmed',
-    notes: 'Regular checkup and cleaning'
-  },
-  {
-    id: 2,
-    patient: 'Sarah Johnson',
-    phone: '(555) 234-5678',
-    dentistId: 2,
-    dentistName: 'Dr. Michael Chen',
-    date: '2024-01-15',
-    time: '10:30',
-    treatment: 'Dental Checkup',
-    status: 'confirmed',
-    notes: 'Annual checkup'
-  },
-  {
-    id: 3,
-    patient: 'Mike Davis',
-    phone: '(555) 345-6789',
-    dentistId: 1,
-    dentistName: 'Dr. Sarah Johnson',
-    date: '2024-01-15',
-    time: '14:00',
-    treatment: 'Cavity Filling',
-    status: 'pending',
-    notes: 'Tooth #14 needs filling'
-  },
-  {
-    id: 4,
-    patient: 'Emily Wilson',
-    phone: '(555) 456-7890',
-    dentistId: 3,
-    dentistName: 'Dr. Emily Rodriguez',
-    date: '2024-01-16',
-    time: '09:30',
-    treatment: 'Tooth Extraction',
-    status: 'confirmed',
-    notes: 'Wisdom tooth removal'
-  },
-  {
-    id: 5,
-    patient: 'Robert Brown',
-    phone: '(555) 567-8901',
-    dentistId: 3,
-    dentistName: 'Dr. Emily Rodriguez',
-    date: '2024-01-16',
-    time: '11:00',
-    treatment: 'Root Canal',
-    status: 'pending',
-    notes: 'Emergency root canal treatment'
-  }
-]
-
 const statusColors = {
   confirmed: 'bg-green-100 text-green-800',
   rescheduled: 'bg-yellow-100 text-yellow-800',
@@ -95,6 +25,82 @@ const getStatusLabel = (status) => {
   return statusOptions.find(option => option.value === status)?.label || status
 }
 
+const normalizeAppointment = (appointment, fallback = {}) => {
+  if (!appointment && fallback) {
+    return fallback
+  }
+
+  const source = appointment?.appointment || appointment || {}
+  const fallbackSource = fallback?.appointment || fallback || {}
+
+  const normalizeValue = (primary, secondary, defaultValue) => {
+    if (primary !== undefined && primary !== null) return primary
+    if (secondary !== undefined && secondary !== null) return secondary
+    return defaultValue
+  }
+
+  return {
+    id: normalizeValue(source.id, fallbackSource.id, undefined),
+    patient: normalizeValue(source.patient, fallbackSource.patient ?? fallbackSource.patientName, ''),
+    phone: normalizeValue(source.phone, fallbackSource.phone ?? fallbackSource.patientPhone, ''),
+    dentistId: normalizeValue(
+      source.dentist_id,
+      fallbackSource.dentist_id ?? fallbackSource.dentistId,
+      null
+    ),
+    dentistName: normalizeValue(
+      source.dentist_name,
+      fallbackSource.dentist_name ?? fallbackSource.dentistName,
+      ''
+    ),
+    date: normalizeValue(
+      source.appointment_date,
+      fallbackSource.appointment_date ?? fallbackSource.date,
+      ''
+    ),
+    time: normalizeValue(
+      source.appointment_time,
+      fallbackSource.appointment_time ?? fallbackSource.time,
+      ''
+    ),
+    treatment: normalizeValue(source.treatment, fallbackSource.treatment, ''),
+    status: normalizeValue(source.status, fallbackSource.status, ''),
+    notes: normalizeValue(source.notes, fallbackSource.notes, ''),
+    createdAt: normalizeValue(
+      source.created_at,
+      fallbackSource.created_at ?? fallbackSource.createdAt,
+      null
+    ),
+    updatedAt: normalizeValue(
+      source.updated_at,
+      fallbackSource.updated_at ?? fallbackSource.updatedAt,
+      null
+    )
+  }
+}
+
+const safeMatch = (value, comparator) => {
+  return (value ?? '').toString().toLowerCase().includes(comparator)
+}
+
+const ITEMS_PER_PAGE = 10
+
+const getStatusRank = (status) => {
+  if (!status) return 0
+  return status === 'completed' ? 1 : 0
+}
+
+const getDateValue = (date, time) => {
+  if (!date) return Number.MAX_SAFE_INTEGER
+  const combined = time ? `${date}T${time}` : `${date}T00:00`
+  const parsed = Date.parse(combined)
+  if (Number.isNaN(parsed)) {
+    const fallbackParsed = Date.parse(date)
+    return Number.isNaN(fallbackParsed) ? Number.MAX_SAFE_INTEGER : fallbackParsed
+  }
+  return parsed
+}
+
 export default function Appointments() {
   const [appointments, setAppointments] = useState([])
   const [dentists, setDentists] = useState([])
@@ -110,10 +116,15 @@ export default function Appointments() {
   const [selectedDate, setSelectedDate] = useState('')
   const [availableTimeSlots, setAvailableTimeSlots] = useState([])
   const [statusUpdatingId, setStatusUpdatingId] = useState(null)
+  const [currentPage, setCurrentPage] = useState(1)
 
   useEffect(() => {
     loadData()
   }, [])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, statusFilter, dentistFilter, appointments.length])
 
   const loadData = async () => {
     try {
@@ -128,20 +139,7 @@ export default function Appointments() {
       const appointmentsData = Array.isArray(appointmentsResponse?.data) ? appointmentsResponse.data : 
                                Array.isArray(appointmentsResponse) ? appointmentsResponse : []
       
-      const normalizedAppointments = appointmentsData.map(appointment => ({
-        id: appointment.id,
-        patient: appointment.patient,
-        phone: appointment.phone,
-        dentistId: appointment.dentist_id, // API uses 'dentist_id', UI expects 'dentistId'
-        dentistName: appointment.dentist_name, // API uses 'dentist_name', UI expects 'dentistName'
-        date: appointment.appointment_date, // API uses 'appointment_date', UI expects 'date'
-        time: appointment.appointment_time, // API uses 'appointment_time', UI expects 'time'
-        treatment: appointment.treatment,
-        status: appointment.status,
-        notes: appointment.notes,
-        createdAt: appointment.created_at,
-        updatedAt: appointment.updated_at
-      }))
+      const normalizedAppointments = appointmentsData.map(appointment => normalizeAppointment(appointment))
       
       console.log('Normalized appointments data:', normalizedAppointments)
       setAppointments(normalizedAppointments)
@@ -183,21 +181,21 @@ export default function Appointments() {
       setSubmitting(true)
       const response = await appointmentsAPI.create(appointmentData)
       
-      // Normalize the response data
-      const normalizedResponse = {
-        id: response.id,
-        patient: response.patient,
-        phone: response.phone,
-        dentistId: response.dentist_id || response.dentistId,
-        dentistName: response.dentist_name || response.dentistName,
-        date: response.date,
-        time: response.time,
-        treatment: response.treatment,
-        status: response.status,
-        notes: response.notes,
-        createdAt: response.created_at,
-        updatedAt: response.updated_at
+      const selectedDentist = dentists.find(dentist => dentist.id === appointmentData.dentist_id)
+      const fallbackAppointment = {
+        patient: appointmentData.patient,
+        phone: appointmentData.phone,
+        dentist_id: appointmentData.dentist_id,
+        dentist_name: selectedDentist?.name || '',
+        appointment_date: appointmentData.appointment_date,
+        appointment_time: appointmentData.appointment_time,
+        treatment: appointmentData.treatment,
+        status: appointmentData.status,
+        notes: appointmentData.notes
       }
+
+      // Normalize the response data
+      const normalizedResponse = normalizeAppointment(response, fallbackAppointment)
       
       setAppointments(prev => [...prev, normalizedResponse])
       setShowAddForm(false)
@@ -213,23 +211,18 @@ export default function Appointments() {
     try {
       const response = await appointmentsAPI.update(id, appointmentData)
       
-      // Normalize the response data
-      const normalizedResponse = {
-        id: response.id,
-        patient: response.patient,
-        phone: response.phone,
-        dentistId: response.dentist_id || response.dentistId,
-        dentistName: response.dentist_name || response.dentistName,
-        date: response.appointment_date || response.date, // Handle both API formats
-        time: response.appointment_time || response.time, // Handle both API formats
-        treatment: response.treatment,
-        status: response.status,
-        notes: response.notes,
-        createdAt: response.created_at,
-        updatedAt: response.updated_at
-      }
-      
-      setAppointments(prev => prev.map(apt => apt.id === id ? normalizedResponse : apt))
+      setAppointments(prev => prev.map(apt => {
+        if (apt.id !== id) return apt
+        const fallbackAppointment = {
+          ...apt,
+          appointment_date: appointmentData.appointment_date ?? appointmentData.date ?? apt.date,
+          appointment_time: appointmentData.appointment_time ?? appointmentData.time ?? apt.time,
+          treatment: appointmentData.treatment ?? apt.treatment,
+          status: appointmentData.status ?? apt.status,
+          notes: appointmentData.notes ?? apt.notes
+        }
+        return normalizeAppointment(response, fallbackAppointment)
+      }))
     } catch (error) {
       setError(error.message)
     }
@@ -281,21 +274,14 @@ export default function Appointments() {
     setStatusUpdatingId(id)
     try {
       const response = await appointmentsAPI.updateStatus(id, status)
-      const normalizedResponse = {
-        id: response.id,
-        patient: response.patient,
-        phone: response.phone,
-        dentistId: response.dentist_id || response.dentistId,
-        dentistName: response.dentist_name || response.dentistName,
-        date: response.appointment_date || response.date,
-        time: response.appointment_time || response.time,
-        treatment: response.treatment,
-        status: response.status,
-        notes: response.notes,
-        createdAt: response.created_at,
-        updatedAt: response.updated_at
-      }
-      setAppointments(prev => prev.map(apt => apt.id === id ? normalizedResponse : apt))
+      setAppointments(prev => prev.map(apt => {
+        if (apt.id !== id) return apt
+        const normalizedResponse = response ? normalizeAppointment(response, { ...apt, status }) : null
+        if (!normalizedResponse) {
+          return { ...apt, status }
+        }
+        return normalizedResponse
+      }))
       setError('')
     } catch (error) {
       setError(error.message)
@@ -304,14 +290,44 @@ export default function Appointments() {
     }
   }
 
+  const normalizedSearchTerm = searchTerm.trim().toLowerCase()
   const filteredAppointments = appointments.filter(appointment => {
-    const matchesSearch = appointment.patient.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         appointment.treatment.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         appointment.notes.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesSearch = normalizedSearchTerm.length === 0 ||
+      safeMatch(appointment.patient, normalizedSearchTerm) ||
+      safeMatch(appointment.treatment, normalizedSearchTerm) ||
+      safeMatch(appointment.notes, normalizedSearchTerm)
     const matchesStatus = statusFilter === 'all' || appointment.status === statusFilter
-    const matchesDentist = dentistFilter === 'all' || appointment.dentistId.toString() === dentistFilter
+    const matchesDentist = dentistFilter === 'all' || (appointment.dentistId != null && appointment.dentistId.toString() === dentistFilter)
     return matchesSearch && matchesStatus && matchesDentist
   })
+
+  const sortedAppointments = [...filteredAppointments].sort((a, b) => {
+    const rankA = getStatusRank(a.status)
+    const rankB = getStatusRank(b.status)
+    if (rankA !== rankB) {
+      return rankA - rankB
+    }
+
+    const dateA = getDateValue(a.date, a.time)
+    const dateB = getDateValue(b.date, b.time)
+    if (dateA !== dateB) {
+      return dateA - dateB
+    }
+
+    return (a.patient || '').localeCompare(b.patient || '')
+  })
+
+  const totalAppointments = sortedAppointments.length
+  const totalPages = Math.max(1, Math.ceil(totalAppointments / ITEMS_PER_PAGE))
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
+
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
+  const paginatedAppointments = sortedAppointments.slice(startIndex, startIndex + ITEMS_PER_PAGE)
 
   if (loading) {
     return (
@@ -424,7 +440,7 @@ export default function Appointments() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredAppointments.map((appointment) => (
+              {paginatedAppointments.map((appointment) => (
                 <tr key={appointment.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
@@ -495,6 +511,36 @@ export default function Appointments() {
               ))}
             </tbody>
           </table>
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mt-4">
+          <p className="text-sm text-gray-600">
+            Showing{' '}
+            {totalAppointments === 0
+              ? '0'
+              : `${startIndex + 1}-${Math.min(startIndex + ITEMS_PER_PAGE, totalAppointments)}`} of {totalAppointments} appointments
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="btn-secondary px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Page</span>
+              <span className="text-sm font-medium text-gray-900">
+                {currentPage} / {totalPages}
+              </span>
+            </div>
+            <button
+              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages || totalAppointments === 0}
+              className="btn-secondary px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
 
