@@ -141,7 +141,12 @@ const extractAppointmentsPayload = (payload) => {
     : []
 
   const rawPage = payload.page ?? payload.current_page ?? meta.page ?? meta.current_page ?? 1
-  const page = rawPage >= 0 ? rawPage + 1 : rawPage
+  const page =
+    rawPage >= 1
+      ? rawPage
+      : rawPage === 0
+      ? 1
+      : Math.max(rawPage + 1, 1)
 
   const rawPageSize =
     payload.page_size ??
@@ -267,7 +272,7 @@ export default function Appointments() {
         setLoading(true)
         const searchQuery = searchTerm.trim()
         const params = {
-          page: Math.max(currentPage - 1, 0),
+          page: Math.max(currentPage, 1),
           page_size: pageSize
         }
 
@@ -302,7 +307,12 @@ export default function Appointments() {
 
         const basePage = page && page > 0 ? page : currentPage
         const fallbackTotal = (basePage - 1) * pageSize + normalizedAppointments.length
-        const inferredTotal = total && total > 0 ? total : fallbackTotal
+        const inferredTotal =
+          total && total > 0
+            ? total
+            : hasNext
+            ? fallbackTotal + pageSize
+            : fallbackTotal
         setTotalItems(inferredTotal)
         setHasNextPage(Boolean(hasNext))
         setHasPrevPage(Boolean(hasPrev) || basePage > 1)
@@ -319,8 +329,10 @@ export default function Appointments() {
           setPageSize(serverPageSize)
         }
 
-        if (page && page !== currentPage) {
-          setCurrentPage(page)
+        const clampedPage = Math.min(Math.max(page, 1), normalizedTotalPages)
+
+        if (clampedPage !== currentPage) {
+          setCurrentPage(clampedPage)
         } else if (currentPage > normalizedTotalPages) {
           setCurrentPage(normalizedTotalPages)
         }
