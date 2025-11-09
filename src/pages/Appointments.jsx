@@ -108,7 +108,9 @@ const extractAppointmentsPayload = (payload) => {
       page: 1,
       pageSize: DEFAULT_PAGE_SIZE,
       total: 0,
-      totalPages: 1
+      totalPages: 1,
+      hasNext: false,
+      hasPrev: false
     }
   }
 
@@ -118,7 +120,9 @@ const extractAppointmentsPayload = (payload) => {
       page: 1,
       pageSize: payload.length || DEFAULT_PAGE_SIZE,
       total: payload.length,
-      totalPages: 1
+      totalPages: 1,
+      hasNext: false,
+      hasPrev: false
     }
   }
 
@@ -136,8 +140,10 @@ const extractAppointmentsPayload = (payload) => {
     ? payload.appointments
     : []
 
-  const page = payload.page ?? payload.current_page ?? meta.page ?? meta.current_page ?? 1
-  const pageSize =
+  const rawPage = payload.page ?? payload.current_page ?? meta.page ?? meta.current_page ?? 1
+  const page = rawPage >= 0 ? rawPage + 1 : rawPage
+
+  const rawPageSize =
     payload.page_size ??
     payload.pageSize ??
     payload.per_page ??
@@ -145,6 +151,8 @@ const extractAppointmentsPayload = (payload) => {
     meta.pageSize ??
     meta.per_page ??
     (dataArray.length || DEFAULT_PAGE_SIZE)
+
+  const pageSize = rawPageSize && rawPageSize > 0 ? rawPageSize : (dataArray.length || DEFAULT_PAGE_SIZE)
   const total =
     payload.total ??
     payload.total_items ??
@@ -154,19 +162,35 @@ const extractAppointmentsPayload = (payload) => {
     meta.total_items ??
     meta.total_count ??
     dataArray.length
-  const totalPages =
+  const rawTotalPages =
     payload.total_pages ??
     payload.totalPages ??
     meta.total_pages ??
     meta.totalPages ??
     (pageSize ? Math.ceil(total / pageSize) : 1)
 
+  const hasNext =
+    payload.has_next ??
+    payload.hasNext ??
+    meta.has_next ??
+    meta.hasNext ??
+    false
+
+  const hasPrev =
+    payload.has_prev ??
+    payload.hasPrev ??
+    meta.has_prev ??
+    meta.hasPrev ??
+    false
+
   return {
     data: dataArray,
     page,
     pageSize,
     total,
-    totalPages
+    totalPages: rawTotalPages,
+    hasNext,
+    hasPrev
   }
 }
 
@@ -190,6 +214,8 @@ export default function Appointments() {
   const [totalPages, setTotalPages] = useState(1)
   const [totalItems, setTotalItems] = useState(0)
   const [reloadToken, setReloadToken] = useState(0)
+  const [hasNextPage, setHasNextPage] = useState(false)
+  const [hasPrevPage, setHasPrevPage] = useState(false)
 
   useEffect(() => {
     setCurrentPage(prev => (prev === 1 ? prev : 1))
@@ -241,7 +267,7 @@ export default function Appointments() {
         setLoading(true)
         const searchQuery = searchTerm.trim()
         const params = {
-          page: currentPage,
+          page: Math.max(currentPage - 1, 0),
           page_size: pageSize
         }
 
@@ -266,24 +292,37 @@ export default function Appointments() {
           page,
           pageSize: serverPageSize,
           total,
-          totalPages: serverTotalPages
+          totalPages: serverTotalPages,
+          hasNext,
+          hasPrev
         } = extractAppointmentsPayload(appointmentsResponse)
 
         const normalizedAppointments = appointmentsData.map(appointment => normalizeAppointment(appointment))
         setAppointments(normalizedAppointments)
-        setTotalItems(total ?? normalizedAppointments.length)
 
-        const safeTotalPages = Math.max(1, serverTotalPages || 1)
-        setTotalPages(safeTotalPages)
+        const basePage = page && page > 0 ? page : currentPage
+        const fallbackTotal = (basePage - 1) * pageSize + normalizedAppointments.length
+        const inferredTotal = total && total > 0 ? total : fallbackTotal
+        setTotalItems(inferredTotal)
+        setHasNextPage(Boolean(hasNext))
+        setHasPrevPage(Boolean(hasPrev) || basePage > 1)
 
-        if (serverPageSize && serverPageSize !== pageSize) {
+        const normalizedTotalPages =
+          serverTotalPages && serverTotalPages > 0
+            ? serverTotalPages
+            : total && total > 0 && pageSize
+            ? Math.max(1, Math.ceil(total / pageSize))
+            : Math.max(basePage, Boolean(hasNext) ? basePage + 1 : basePage)
+        setTotalPages(normalizedTotalPages)
+
+        if (serverPageSize && serverPageSize > 0 && serverPageSize !== pageSize) {
           setPageSize(serverPageSize)
         }
 
         if (page && page !== currentPage) {
           setCurrentPage(page)
-        } else if (currentPage > safeTotalPages) {
-          setCurrentPage(safeTotalPages)
+        } else if (currentPage > normalizedTotalPages) {
+          setCurrentPage(normalizedTotalPages)
         }
 
         setError('')
@@ -293,6 +332,8 @@ export default function Appointments() {
           setAppointments([])
           setTotalItems(0)
           setTotalPages(1)
+          setHasNextPage(false)
+          setHasPrevPage(false)
         }
       } finally {
         if (!abort) {
@@ -454,9 +495,27 @@ export default function Appointments() {
   })
 
   const visibleAppointments = sortedAppointments
-  const safeTotalPages = Math.max(1, totalPages)
-  const startItemIndex = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1
-  const endItemIndex = totalItems === 0 ? 0 : Math.min(startItemIndex + visibleAppointments.length - 1, totalItems)
+  const safeTotalPages =
+    totalPages && totalPages > 0
+      ? totalPages
+      : Math.max(currentPage, hasNextPage ? currentPage + 1 : currentPage)
+  const startItemIndex =
+    visibleAppointments.length === 0 ? 0 : (currentPage - 1) * pageSize + 1
+  const endItemIndex =
+    visibleAppointments.length === 0
+      ? 0
+      : startItemIndex + visibleAppointments.length - 1
+
+  const totalLabel =
+    totalItems > 0
+      ? `${totalItems}${hasNextPage && totalItems <= endItemIndex ? '+' : ''}`
+      : hasNextPage
+      ? `${endItemIndex}+`
+      : `${endItemIndex}`
+  const rangeLabel =
+    visibleAppointments.length === 0 ? '0' : `${startItemIndex}-${endItemIndex}`
+  const canGoPrev = currentPage > 1 || hasPrevPage
+  const canGoNext = hasNextPage || currentPage < safeTotalPages
 
   if (loading) {
     return (
@@ -643,12 +702,12 @@ export default function Appointments() {
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mt-4">
           <p className="text-sm text-gray-600">
-            Showing {totalItems === 0 ? '0' : `${startItemIndex}-${endItemIndex}`} of {totalItems} appointments
+            Showing {rangeLabel} of {totalLabel} appointments
           </p>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-              disabled={currentPage <= 1}
+              disabled={!canGoPrev}
               className="btn-secondary px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Previous
@@ -661,7 +720,7 @@ export default function Appointments() {
             </div>
             <button
               onClick={() => setCurrentPage((prev) => Math.min(safeTotalPages, prev + 1))}
-              disabled={currentPage >= safeTotalPages || totalItems === 0}
+              disabled={!canGoNext}
               className="btn-secondary px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Next
