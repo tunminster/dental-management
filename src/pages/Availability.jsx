@@ -65,6 +65,7 @@ export default function Availability() {
   const [selectedDate, setSelectedDate] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingAvailability, setEditingAvailability] = useState(null)
+  const [editTimeSlots, setEditTimeSlots] = useState([])
   const [submitting, setSubmitting] = useState(false)
   
   // Form state for adding availability
@@ -159,26 +160,27 @@ export default function Availability() {
     }
   }
 
-  const handleUpdateAvailability = async (id, availabilityData) => {
+  const handleUpdateAvailability = async (id, availabilityPayload, fallback = {}) => {
     try {
-      const response = await availabilityAPI.update(id, availabilityData)
+      const response = await availabilityAPI.update(id, availabilityPayload)
       
       // Handle API response - could be nested in data property
-      const availability = response?.data || response
+      const availability = response?.data || response || {}
       
       // Normalize the response data
       const normalizedResponse = {
-        id: availability.id,
-        dentistId: availability.dentist_id || availability.dentistId,
-        dentistName: availability.dentist_name || availability.dentistName,
-        date: availability.date,
-        timeSlots: availability.time_slots || availability.timeSlots || [],
-        createdAt: availability.created_at,
-        updatedAt: availability.updated_at
+        id: availability.id ?? fallback.id ?? id,
+        dentistId: availability.dentist_id || availability.dentistId || fallback.dentistId,
+        dentistName: availability.dentist_name || availability.dentistName || fallback.dentistName,
+        date: availability.date || fallback.date,
+        timeSlots: availability.time_slots || availability.timeSlots || fallback.timeSlots || [],
+        createdAt: availability.created_at || fallback.createdAt,
+        updatedAt: availability.updated_at || fallback.updatedAt
       }
       
       setAvailabilityData(prev => prev.map(avail => avail.id === id ? normalizedResponse : avail))
       setEditingAvailability(null)
+      setEditTimeSlots([])
       setError('')
     } catch (error) {
       console.error('Error updating availability:', error)
@@ -218,17 +220,39 @@ export default function Availability() {
 
   const handleEditFormSubmit = async (e) => {
     e.preventDefault()
-    const formData = new FormData(e.target)
-    
-    const availabilityData = {
-      dentist_id: parseInt(formData.get('dentist')),
-      date: formData.get('date'),
-      time_slots: [
-        { start: formData.get('startTime'), end: formData.get('endTime'), available: true }
-      ]
+
+    if (!editingAvailability) return
+
+    if (!editTimeSlots.length) {
+      setError('Please provide at least one time slot before saving.')
+      return
     }
-    
-    await handleUpdateAvailability(editingAvailability.id, availabilityData)
+
+    const sanitizedSlots = editTimeSlots
+      .filter(slot => slot.start && slot.end)
+      .map(slot => ({
+        start: slot.start,
+        end: slot.end,
+        available: Boolean(slot.available)
+      }))
+
+    if (!sanitizedSlots.length) {
+      setError('Each time slot must have a start and end time.')
+      return
+    }
+
+    const availabilityPayload = {
+      time_slots: sanitizedSlots
+    }
+
+    await handleUpdateAvailability(
+      editingAvailability.id,
+      availabilityPayload,
+      {
+        ...editingAvailability,
+        timeSlots: sanitizedSlots
+      }
+    )
   }
 
   const filteredAvailability = availabilityData.filter(avail => {
@@ -359,6 +383,24 @@ export default function Availability() {
     setFormTimeSlots(prev => prev.filter((_, i) => i !== index))
   }
 
+  // Edit modal time slot helpers
+  const handleAddEditTimeSlot = () => {
+    setEditTimeSlots(prev => [
+      ...prev,
+      { start: '09:00', end: '10:00', available: true }
+    ])
+  }
+
+  const handleUpdateEditTimeSlot = (index, field, value) => {
+    setEditTimeSlots(prev =>
+      prev.map((slot, i) => (i === index ? { ...slot, [field]: value } : slot))
+    )
+  }
+
+  const handleRemoveEditTimeSlot = (index) => {
+    setEditTimeSlots(prev => prev.filter((_, i) => i !== index))
+  }
+
   // Reset form
   const resetAddForm = () => {
     setFormDentistId('')
@@ -480,7 +522,14 @@ export default function Availability() {
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setEditingAvailability(availability)}
+                  onClick={() => {
+                    setEditingAvailability(availability)
+                    setEditTimeSlots(availability.timeSlots.map(slot => ({
+                      start: slot.start,
+                      end: slot.end,
+                      available: slot.available
+                    })))
+                  }}
                   className="text-primary-600 hover:text-primary-900 flex items-center gap-1"
                 >
                   <Edit className="h-4 w-4" />
@@ -663,56 +712,93 @@ export default function Availability() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Dentist</label>
-                  <select name="dentist" className="input-field" defaultValue={editingAvailability.dentistId} required>
-                    {dentists.map(dentist => (
-                      <option key={dentist.id} value={dentist.id}>{dentist.name}</option>
-                    ))}
-                  </select>
+                  <input
+                    type="text"
+                    value={editingAvailability.dentistName}
+                    disabled
+                    className="input-field bg-gray-50"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
                   <input 
-                    name="date"
                     type="date" 
                     defaultValue={editingAvailability.date}
                     className="input-field" 
-                    required
+                    disabled
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                  <select className="input-field">
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
                 </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">Time Slots</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {editingAvailability.timeSlots.map((slot, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="checkbox"
-                          defaultChecked={slot.available}
-                          className="rounded"
-                        />
-                        <span className="text-sm font-medium">{slot.start} - {slot.end}</span>
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={handleAddEditTimeSlot}
+                    className="btn-secondary flex items-center gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Time Slot
+                  </button>
+
+                  <div className="space-y-2">
+                    {editTimeSlots.map((slot, index) => (
+                      <div key={index} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                        <div className="flex-1 flex items-center gap-2">
+                          <input
+                            type="time"
+                            value={slot.start}
+                            onChange={(e) => handleUpdateEditTimeSlot(index, 'start', e.target.value)}
+                            className="input-field"
+                            required
+                          />
+                          <span className="text-gray-400">to</span>
+                          <input
+                            type="time"
+                            value={slot.end}
+                            onChange={(e) => handleUpdateEditTimeSlot(index, 'end', e.target.value)}
+                            className="input-field"
+                            required
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={slot.available}
+                              onChange={(e) => handleUpdateEditTimeSlot(index, 'available', e.target.checked)}
+                              className="rounded"
+                            />
+                            <span className="text-gray-700">Available</span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEditTimeSlot(index)}
+                            className="text-red-600 hover:text-red-900 p-1"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
-                      <button type="button" className="text-red-600 hover:text-red-900">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+
+                  {editTimeSlots.length === 0 && (
+                    <p className="text-sm text-gray-500 text-center py-4">
+                      No time slots defined. Click &ldquo;Add Time Slot&rdquo; to create availability.
+                    </p>
+                  )}
                 </div>
               </div>
 
               <div className="flex justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setEditingAvailability(null)}
+                  onClick={() => {
+                    setEditingAvailability(null)
+                    setEditTimeSlots([])
+                  }}
                   className="btn-secondary"
                 >
                   Cancel

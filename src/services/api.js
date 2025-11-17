@@ -390,9 +390,9 @@ export const dashboardAPI = {
     }
   },
 
-  getTodayAppointments: async () => {
+  getTodayAppointments: async (params = {}) => {
     try {
-      const response = await apiClient.get('/api/dashboard/appointments/today')
+      const response = await apiClient.get('/api/dashboard/appointments/today', { params })
       return response.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to fetch today\'s appointments')
