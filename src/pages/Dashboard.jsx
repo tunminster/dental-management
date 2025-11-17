@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Calendar, Users, Clock, TrendingUp, Loader, AlertCircle } from 'lucide-react'
+import { Calendar, Users, Clock, TrendingUp, Loader, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { dashboardAPI } from '../services/api'
+import { formatDateInClinicTimezone } from '../utils/timezone'
 
 const stats = [
   { name: 'Today\'s Appointments', value: '12', icon: Calendar, change: '+2', changeType: 'positive' },
@@ -32,24 +33,34 @@ export default function Dashboard() {
   const [recentAppointments, setRecentAppointments] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [appointmentsLabel, setAppointmentsLabel] = useState("Today's Appointments")
+  const [currentFilterType, setCurrentFilterType] = useState('today')
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize] = useState(10)
+  const [totalItems, setTotalItems] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+  const [hasNext, setHasNext] = useState(false)
+  const [hasPrev, setHasPrev] = useState(false)
+  const [loadingAppointments, setLoadingAppointments] = useState(false)
 
   useEffect(() => {
     loadDashboardData()
   }, [])
 
+  useEffect(() => {
+    loadAppointments()
+  }, [currentPage, currentFilterType])
+
   const loadDashboardData = async () => {
     try {
       setLoading(true)
-      const [statsResponse, appointmentsResponse] = await Promise.all([
-        dashboardAPI.getStats(),
-        dashboardAPI.getTodayAppointments()
-      ])
+      const statsResponse = await dashboardAPI.getStats()
       
       console.log('Dashboard API responses:', {
         statsResponse,
-        appointmentsResponse,
-        statsType: typeof statsResponse,
-        appointmentsType: typeof appointmentsResponse
+        statsType: typeof statsResponse
       })
       
       // Process stats data from API response
@@ -75,8 +86,148 @@ export default function Dashboard() {
         }))
       }
       
-      const appointmentsData = Array.isArray(appointmentsResponse?.data) ? appointmentsResponse.data : 
-                              Array.isArray(appointmentsResponse) ? appointmentsResponse : recentAppointments
+      setStats(statsData)
+      
+      // Initial load of appointments
+      await loadAppointments()
+    } catch (error) {
+      console.error('Dashboard API error:', error)
+      // Use mock data as fallback
+      setStats(stats)
+      setRecentAppointments(recentAppointments)
+      setAppointmentsLabel("Today's Appointments")
+      setError('Failed to load dashboard data. Showing sample data.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadAppointments = async () => {
+    try {
+      setLoadingAppointments(true)
+      let appointmentsResponse
+      let appointmentsData = []
+      let filterType = currentFilterType
+      
+      // Try to fetch today's appointments first
+      if (currentFilterType === 'today') {
+        try {
+          appointmentsResponse = await dashboardAPI.getTodayAppointments({
+            filter_type: 'today',
+            page: currentPage,
+            page_size: pageSize
+          })
+          
+          // Handle new response structure: { items: [...], page, page_size, total_items, total_pages, has_next, has_prev, filter_type }
+          appointmentsData = Array.isArray(appointmentsResponse?.items) ? appointmentsResponse.items :
+                            Array.isArray(appointmentsResponse?.appointments) ? appointmentsResponse.appointments :
+                            Array.isArray(appointmentsResponse?.data) ? appointmentsResponse.data : 
+                            Array.isArray(appointmentsResponse) ? appointmentsResponse : []
+          
+          // Update pagination state from response
+          if (appointmentsResponse) {
+            setTotalItems(appointmentsResponse.total_items || appointmentsResponse.totalItems || appointmentsData.length)
+            setTotalPages(appointmentsResponse.total_pages || appointmentsResponse.totalPages || 1)
+            setHasNext(appointmentsResponse.has_next || appointmentsResponse.hasNext || false)
+            setHasPrev(appointmentsResponse.has_prev || appointmentsResponse.hasPrev || currentPage > 1)
+            
+            if (appointmentsResponse.filter_type) {
+              filterType = appointmentsResponse.filter_type
+              setCurrentFilterType(filterType)
+            }
+          }
+          
+          // If no appointments for today, try upcoming (only on first page)
+          if ((!appointmentsData || appointmentsData.length === 0) && currentPage === 1) {
+            appointmentsResponse = await dashboardAPI.getTodayAppointments({
+              filter_type: 'upcoming',
+              page: 1,
+              page_size: pageSize
+            })
+            
+            appointmentsData = Array.isArray(appointmentsResponse?.items) ? appointmentsResponse.items :
+                              Array.isArray(appointmentsResponse?.appointments) ? appointmentsResponse.appointments :
+                              Array.isArray(appointmentsResponse?.data) ? appointmentsResponse.data : 
+                              Array.isArray(appointmentsResponse) ? appointmentsResponse : []
+            
+            if (appointmentsResponse) {
+              setTotalItems(appointmentsResponse.total_items || appointmentsResponse.totalItems || appointmentsData.length)
+              setTotalPages(appointmentsResponse.total_pages || appointmentsResponse.totalPages || 1)
+              setHasNext(appointmentsResponse.has_next || appointmentsResponse.hasNext || false)
+              setHasPrev(appointmentsResponse.has_prev || appointmentsResponse.hasPrev || false)
+              
+              if (appointmentsResponse.filter_type) {
+                filterType = appointmentsResponse.filter_type
+                setCurrentFilterType(filterType)
+                setCurrentPage(1) // Reset to page 1 when switching to upcoming
+              } else {
+                filterType = 'upcoming'
+                setCurrentFilterType('upcoming')
+              }
+            }
+          }
+        } catch (appointmentsError) {
+          console.error('Error fetching appointments:', appointmentsError)
+          // If today fails, try upcoming (only on first page)
+          if (currentPage === 1) {
+            try {
+              appointmentsResponse = await dashboardAPI.getTodayAppointments({
+                filter_type: 'upcoming',
+                page: 1,
+                page_size: pageSize
+              })
+              
+              appointmentsData = Array.isArray(appointmentsResponse?.items) ? appointmentsResponse.items :
+                                Array.isArray(appointmentsResponse?.appointments) ? appointmentsResponse.appointments :
+                                Array.isArray(appointmentsResponse?.data) ? appointmentsResponse.data : 
+                                Array.isArray(appointmentsResponse) ? appointmentsResponse : []
+              
+              if (appointmentsResponse) {
+                setTotalItems(appointmentsResponse.total_items || appointmentsResponse.totalItems || appointmentsData.length)
+                setTotalPages(appointmentsResponse.total_pages || appointmentsResponse.totalPages || 1)
+                setHasNext(appointmentsResponse.has_next || appointmentsResponse.hasNext || false)
+                setHasPrev(appointmentsResponse.has_prev || appointmentsResponse.hasPrev || false)
+                
+                if (appointmentsResponse.filter_type) {
+                  filterType = appointmentsResponse.filter_type
+                  setCurrentFilterType(filterType)
+                } else {
+                  filterType = 'upcoming'
+                  setCurrentFilterType('upcoming')
+                }
+                setCurrentPage(1)
+              }
+            } catch (upcomingError) {
+              console.error('Error fetching upcoming appointments:', upcomingError)
+              appointmentsData = []
+            }
+          }
+        }
+      } else {
+        // Fetch upcoming appointments
+        appointmentsResponse = await dashboardAPI.getTodayAppointments({
+          filter_type: 'upcoming',
+          page: currentPage,
+          page_size: pageSize
+        })
+        
+        appointmentsData = Array.isArray(appointmentsResponse?.items) ? appointmentsResponse.items :
+                          Array.isArray(appointmentsResponse?.appointments) ? appointmentsResponse.appointments :
+                          Array.isArray(appointmentsResponse?.data) ? appointmentsResponse.data : 
+                          Array.isArray(appointmentsResponse) ? appointmentsResponse : []
+        
+        if (appointmentsResponse) {
+          setTotalItems(appointmentsResponse.total_items || appointmentsResponse.totalItems || appointmentsData.length)
+          setTotalPages(appointmentsResponse.total_pages || appointmentsResponse.totalPages || 1)
+          setHasNext(appointmentsResponse.has_next || appointmentsResponse.hasNext || false)
+          setHasPrev(appointmentsResponse.has_prev || appointmentsResponse.hasPrev || currentPage > 1)
+          
+          if (appointmentsResponse.filter_type) {
+            filterType = appointmentsResponse.filter_type
+            setCurrentFilterType(filterType)
+          }
+        }
+      }
       
       // Normalize appointment data to match UI expectations
       const normalizedAppointments = Array.isArray(appointmentsData) ? appointmentsData.map(appointment => ({
@@ -86,31 +237,34 @@ export default function Dashboard() {
         phone: appointment.phone,
         dentistId: appointment.dentist_id || appointment.dentistId,
         dentistName: appointment.dentist_name || appointment.dentistName,
-        date: appointment.date,
-        time: appointment.time,
+        date: appointment.appointment_date || appointment.date,
+        time: appointment.appointment_time || appointment.time,
         treatment: appointment.treatment,
         status: appointment.status,
         notes: appointment.notes,
         createdAt: appointment.created_at,
         updatedAt: appointment.updated_at
-      })) : recentAppointments
+      })) : []
       
-      console.log('Processed data:', {
-        statsData: Array.isArray(statsData) ? `${statsData.length} items` : 'Not array',
-        statsDataSample: Array.isArray(statsData) && statsData.length > 0 ? statsData[0] : 'No data',
-        appointmentsData: Array.isArray(appointmentsData) ? `${appointmentsData.length} items` : 'Not array'
+      // Update label based on filter type
+      setAppointmentsLabel(filterType === 'today' ? "Today's Appointments" : "Upcoming Appointments")
+      
+      console.log('Processed appointments:', {
+        appointmentsData: Array.isArray(appointmentsData) ? `${appointmentsData.length} items` : 'Not array',
+        filterType,
+        currentPage,
+        totalItems,
+        totalPages,
+        hasNext,
+        hasPrev
       })
       
-      setStats(statsData)
       setRecentAppointments(normalizedAppointments)
     } catch (error) {
-      console.error('Dashboard API error:', error)
-      // Use mock data as fallback
-      setStats(stats)
-      setRecentAppointments(recentAppointments)
-      setError('Failed to load dashboard data. Showing sample data.')
+      console.error('Error loading appointments:', error)
+      setRecentAppointments([])
     } finally {
-      setLoading(false)
+      setLoadingAppointments(false)
     }
   }
 
@@ -181,43 +335,107 @@ export default function Dashboard() {
 
       {/* Recent Appointments */}
       <div className="card">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Today's Appointments</h3>
-        <div className="flow-root">
-          <ul className="-my-5 divide-y divide-gray-200">
-            {Array.isArray(recentAppointments) && recentAppointments.map((appointment) => (
-              <li key={appointment.id} className="py-4">
-                <div className="flex items-center space-x-4">
-                  <div className="flex-shrink-0">
-                    <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center">
-                      <span className="text-sm font-medium text-primary-600">
-                        {appointment.patientName?.split(' ').map(n => n[0]).join('') || 'P'}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{appointment.patientName}</p>
-                    <p className="text-sm text-gray-500">{appointment.treatment}</p>
-                  </div>
-                  <div className="flex-shrink-0 text-sm text-gray-500">{appointment.time}</div>
-                  <div className="flex-shrink-0">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      appointment.status === 'confirmed' 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {appointment.status}
-                    </span>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-          {!Array.isArray(recentAppointments) || recentAppointments.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <p>No appointments scheduled for today.</p>
-            </div>
-          ) : null}
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-medium text-gray-900">{appointmentsLabel}</h3>
+          {loadingAppointments && (
+            <Loader className="h-4 w-4 text-primary-600 animate-spin" />
+          )}
         </div>
+        <div className="flow-root">
+          {loadingAppointments && recentAppointments.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <Loader className="h-6 w-6 text-primary-600 animate-spin mx-auto mb-2" />
+              <p>Loading appointments...</p>
+            </div>
+          ) : (
+            <>
+              <ul className="-my-5 divide-y divide-gray-200">
+                {Array.isArray(recentAppointments) && recentAppointments.map((appointment) => (
+                  <li key={appointment.id} className="py-4">
+                    <div className="flex items-center space-x-4">
+                      <div className="flex-shrink-0">
+                        <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center">
+                          <span className="text-sm font-medium text-primary-600">
+                            {appointment.patientName?.split(' ').map(n => n[0]).join('') || 'P'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{appointment.patientName}</p>
+                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                          <span>{appointment.treatment}</span>
+                          {currentFilterType === 'upcoming' && appointment.date && (
+                            <>
+                              <span>•</span>
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {formatDateInClinicTimezone(appointment.date)}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex-shrink-0 text-sm text-gray-500">{appointment.time}</div>
+                      <div className="flex-shrink-0">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          appointment.status === 'confirmed' 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {appointment.status}
+                        </span>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {!Array.isArray(recentAppointments) || recentAppointments.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p>
+                    {appointmentsLabel === "Today's Appointments" 
+                      ? "No appointments scheduled for today." 
+                      : "No upcoming appointments."}
+                  </p>
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+        
+        {/* Pagination Controls */}
+        {(totalPages > 1 || hasNext || hasPrev) && (
+          <div className="mt-4 flex items-center justify-between border-t border-gray-200 pt-4">
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <span>
+                Showing {totalItems === 0 ? 0 : ((currentPage - 1) * pageSize + 1)} to {Math.min(currentPage * pageSize, totalItems)} of {totalItems} appointments
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={!hasPrev && currentPage === 1}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </button>
+              <div className="flex items-center gap-1 text-sm text-gray-700">
+                <span>Page</span>
+                <span className="font-medium">{currentPage}</span>
+                <span>of</span>
+                <span className="font-medium">{totalPages}</span>
+              </div>
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={!hasNext && currentPage >= totalPages}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
