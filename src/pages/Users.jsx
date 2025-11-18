@@ -5,8 +5,13 @@ import { Plus, Search, Filter, User, Mail, Phone, Shield, Edit, Trash2, Eye, Eye
 const roles = [
   { value: 'admin', label: 'Administrator', color: 'bg-red-100 text-red-800' },
   { value: 'receptionist', label: 'Receptionist', color: 'bg-blue-100 text-blue-800' },
-  { value: 'dentist', label: 'Dentist', color: 'bg-green-100 text-green-800' }
+  { value: 'dentist', label: 'Dentist', color: 'bg-green-100 text-green-800' },
+  { value: 'user', label: 'User', color: 'bg-gray-100 text-gray-800' }
 ]
+
+const getRoleInfo = (role) => {
+  return roles.find(r => r.value === role) || { value: role, label: role, color: 'bg-gray-100 text-gray-800' }
+}
 
 export default function Users() {
   const { users, addUser, updateUser, deleteUser, hasPermission, loadUsers } = useAuth()
@@ -25,11 +30,18 @@ export default function Users() {
     loadUsersData()
   }, [])
 
+  useEffect(() => {
+    console.log('Users state updated:', users)
+    console.log('Users count:', Array.isArray(users) ? users.length : 'Not an array')
+  }, [users])
+
   const loadUsersData = async () => {
     try {
       setLoading(true)
       await loadUsers()
+      console.log('Users loaded from AuthContext:', users)
     } catch (error) {
+      console.error('Error loading users:', error)
       setError(error.message)
     } finally {
       setLoading(false)
@@ -80,6 +92,35 @@ export default function Users() {
       [userId]: !prev[userId]
     }))
   }
+
+  // Normalize users data from API (is_active -> isActive, last_login -> lastLogin)
+  const normalizedUsers = Array.isArray(users) ? users.map(user => ({
+    ...user,
+    isActive: user.is_active !== undefined ? user.is_active : user.isActive,
+    lastLogin: user.last_login || user.lastLogin,
+    // Ensure all required fields exist
+    id: user.id,
+    username: user.username || '',
+    email: user.email || '',
+    name: user.name || '',
+    role: user.role || 'user'
+  })) : []
+
+  // Filter users based on search term, role, and status
+  const filteredUsers = normalizedUsers.filter(user => {
+    const matchesSearch = !searchTerm || 
+      user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.username?.toLowerCase().includes(searchTerm.toLowerCase())
+    
+    const matchesRole = roleFilter === 'all' || user.role === roleFilter
+    
+    const matchesStatus = statusFilter === 'all' || 
+      (statusFilter === 'active' && user.isActive) ||
+      (statusFilter === 'inactive' && !user.isActive)
+    
+    return matchesSearch && matchesRole && matchesStatus
+  })
 
   if (loading) {
     return (
@@ -196,82 +237,92 @@ export default function Users() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredUsers.map((user) => {
-                const roleInfo = getRoleInfo(user.role)
-                return (
-                  <tr key={user.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center">
-                          <User className="h-5 w-5 text-primary-600" />
+              {filteredUsers.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+                    {normalizedUsers.length === 0 
+                      ? 'No users found. Click "Add User" to create a new user.'
+                      : 'No users match your filters.'}
+                  </td>
+                </tr>
+              ) : (
+                filteredUsers.map((user) => {
+                  const roleInfo = getRoleInfo(user.role)
+                  return (
+                    <tr key={user.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center">
+                            <User className="h-5 w-5 text-primary-600" />
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-gray-900">{user.name}</div>
+                            <div className="text-sm text-gray-500">{user.email}</div>
+                            <div className="text-xs text-gray-400">@{user.username}</div>
+                          </div>
                         </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                          <div className="text-sm text-gray-500">{user.email}</div>
-                          <div className="text-xs text-gray-400">@{user.username}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${roleInfo.color}`}>
-                        {roleInfo.label}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        {user.isActive ? (
-                          <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                        ) : (
-                          <XCircle className="h-4 w-4 text-red-500 mr-2" />
-                        )}
-                        <span className={`text-sm ${user.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                          {user.isActive ? 'Active' : 'Inactive'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${roleInfo.color}`}>
+                          {roleInfo.label}
                         </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => {
-                            setSelectedUser(user)
-                            setShowEditForm(true)
-                          }}
-                          className="text-primary-600 hover:text-primary-900 flex items-center gap-1"
-                        >
-                          <Edit className="h-4 w-4" />
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => togglePasswordVisibility(user.id)}
-                          className="text-gray-600 hover:text-gray-900 flex items-center gap-1"
-                        >
-                          {showPasswords[user.id] ? (
-                            <EyeOff className="h-4 w-4" />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          {user.isActive ? (
+                            <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
                           ) : (
-                            <Eye className="h-4 w-4" />
+                            <XCircle className="h-4 w-4 text-red-500 mr-2" />
                           )}
-                          {showPasswords[user.id] ? 'Hide' : 'Show'} Password
-                        </button>
-                        <button
-                          onClick={() => handleDeleteUser(user.id)}
-                          className="text-red-600 hover:text-red-900 flex items-center gap-1"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Delete
-                        </button>
-                      </div>
-                      {showPasswords[user.id] && (
-                        <div className="mt-2 text-xs text-gray-500 font-mono">
-                          Password: {user.password}
+                          <span className={`text-sm ${user.isActive ? 'text-green-600' : 'text-red-600'}`}>
+                            {user.isActive ? 'Active' : 'Inactive'}
+                          </span>
                         </div>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setSelectedUser(user)
+                              setShowEditForm(true)
+                            }}
+                            className="text-primary-600 hover:text-primary-900 flex items-center gap-1"
+                          >
+                            <Edit className="h-4 w-4" />
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => togglePasswordVisibility(user.id)}
+                            className="text-gray-600 hover:text-gray-900 flex items-center gap-1"
+                          >
+                            {showPasswords[user.id] ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                            {showPasswords[user.id] ? 'Hide' : 'Show'} Password
+                          </button>
+                          <button
+                            onClick={() => handleDeleteUser(user.id)}
+                            className="text-red-600 hover:text-red-900 flex items-center gap-1"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Delete
+                          </button>
+                        </div>
+                        {showPasswords[user.id] && (
+                          <div className="mt-2 text-xs text-gray-500 font-mono">
+                            Password: {user.password}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
             </tbody>
           </table>
         </div>
