@@ -1,30 +1,39 @@
 import { useState, useEffect } from 'react'
-import { Save, User, Bell, Shield, Database, Loader, AlertCircle } from 'lucide-react'
+import { Save, User, Bell, Shield, Database, Loader, AlertCircle, CheckCircle } from 'lucide-react'
 import { settingsAPI } from '../services/api'
 
-export default function Settings() {
-  const [settings, setSettings] = useState({
-    practiceName: 'DentalCare Practice',
-    address: '123 Main Street, City, State 12345',
-    phone: '(555) 123-4567',
-    email: 'info@dentalcare.com',
-    workingHours: {
-      monday: { start: '09:00', end: '17:00', closed: false },
-      tuesday: { start: '09:00', end: '17:00', closed: false },
-      wednesday: { start: '09:00', end: '17:00', closed: false },
-      thursday: { start: '09:00', end: '17:00', closed: false },
-      friday: { start: '09:00', end: '17:00', closed: false },
-      saturday: { start: '09:00', end: '13:00', closed: false },
-      sunday: { start: '09:00', end: '17:00', closed: true }
-    },
-    notifications: {
-      emailReminders: true,
-      smsReminders: true,
-      appointmentConfirmations: true,
-      newPatientAlerts: true
-    }
-  })
+// Day order for sorting
+const dayOrder = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
 
+const defaultSettings = {
+  practiceName: '',
+  address: '',
+  phone: '',
+  email: '',
+  workingHours: {
+    monday: { start: '09:00', end: '17:00', closed: false },
+    tuesday: { start: '09:00', end: '17:00', closed: false },
+    wednesday: { start: '09:00', end: '17:00', closed: false },
+    thursday: { start: '09:00', end: '17:00', closed: false },
+    friday: { start: '09:00', end: '17:00', closed: false },
+    saturday: { start: '09:00', end: '13:00', closed: false },
+    sunday: { start: '09:00', end: '17:00', closed: true }
+  },
+  notifications: {
+    emailReminders: true,
+    smsReminders: true,
+    appointmentConfirmations: true,
+    newPatientAlerts: true
+  }
+}
+
+export default function Settings() {
+  const [settings, setSettings] = useState(defaultSettings)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [settingsId, setSettingsId] = useState(null)
   const [activeTab, setActiveTab] = useState('general')
 
   const tabs = [
@@ -34,10 +43,121 @@ export default function Settings() {
     { id: 'backup', name: 'Backup', icon: Database }
   ]
 
-  const handleSave = () => {
-    // Here you would typically save to your API
-    console.log('Settings saved:', settings)
-    alert('Settings saved successfully!')
+  // Normalize API response (snake_case to camelCase)
+  const normalizeSettings = (apiSettings) => {
+    if (!apiSettings) return defaultSettings
+
+    // Normalize working_hours
+    let workingHours = {}
+    if (apiSettings.working_hours && Object.keys(apiSettings.working_hours).length > 0) {
+      Object.entries(apiSettings.working_hours).forEach(([day, hours]) => {
+        workingHours[day.toLowerCase()] = {
+          start: hours.start || '09:00',
+          end: hours.end || '17:00',
+          closed: hours.closed !== undefined ? hours.closed : false
+        }
+      })
+    } else {
+      workingHours = { ...defaultSettings.workingHours }
+    }
+
+    return {
+      practiceName: apiSettings.practice_name || '',
+      address: apiSettings.address || '',
+      phone: apiSettings.phone || '',
+      email: apiSettings.email || '',
+      workingHours: workingHours,
+      notifications: apiSettings.notifications || defaultSettings.notifications
+    }
+  }
+
+  // Convert to API format (camelCase to snake_case)
+  const toApiFormat = (settingsData) => {
+    const workingHours = {}
+    Object.entries(settingsData.workingHours).forEach(([day, hours]) => {
+      workingHours[day.toLowerCase()] = {
+        start: hours.start || '09:00',
+        end: hours.end || '17:00',
+        closed: hours.closed !== undefined ? hours.closed : false
+      }
+    })
+
+    return {
+      practice_name: settingsData.practiceName,
+      address: settingsData.address,
+      phone: settingsData.phone,
+      email: settingsData.email,
+      working_hours: workingHours,
+      notifications: settingsData.notifications
+    }
+  }
+
+  // Sort working days
+  const getSortedWorkingDays = (workingHours) => {
+    return dayOrder.filter(day => workingHours.hasOwnProperty(day))
+      .map(day => [day, workingHours[day]])
+  }
+
+  useEffect(() => {
+    loadSettings()
+  }, [])
+
+  const loadSettings = async () => {
+    try {
+      setLoading(true)
+      setError('')
+      const response = await settingsAPI.get()
+      console.log('Settings loaded:', response)
+      
+      if (response) {
+        setSettingsId(response.id)
+        setSettings(normalizeSettings(response))
+      } else {
+        setSettings(defaultSettings)
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error)
+      // If settings don't exist (404), use defaults
+      if (error.response?.status === 404) {
+        setSettings(defaultSettings)
+      } else {
+        setError(error.message || 'Failed to load settings')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSave = async () => {
+    try {
+      setSaving(true)
+      setError('')
+      setSuccess('')
+      
+      const apiPayload = toApiFormat(settings)
+      console.log('Saving settings:', apiPayload)
+
+      let response
+      if (settingsId) {
+        // Update existing settings
+        response = await settingsAPI.update(apiPayload)
+      } else {
+        // Create new settings
+        response = await settingsAPI.create(apiPayload)
+      }
+
+      if (response) {
+        setSettingsId(response.id)
+        setSettings(normalizeSettings(response))
+        setSuccess('Settings saved successfully!')
+        setTimeout(() => setSuccess(''), 3000)
+      }
+    } catch (error) {
+      console.error('Error saving settings:', error)
+      setError(error.message || 'Failed to save settings')
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (loading) {
@@ -65,6 +185,19 @@ export default function Settings() {
           <button
             onClick={() => setError('')}
             className="ml-auto text-red-500 hover:text-red-700"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {success && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
+          <CheckCircle className="h-5 w-5 text-green-500" />
+          <span className="text-green-700 text-sm">{success}</span>
+          <button
+            onClick={() => setSuccess('')}
+            className="ml-auto text-green-500 hover:text-green-700"
           >
             ×
           </button>
@@ -143,9 +276,9 @@ export default function Settings() {
                 <div>
                   <h4 className="text-md font-medium text-gray-900 mb-4">Working Hours</h4>
                   <div className="space-y-3">
-                    {Object.entries(settings.workingHours).map(([day, hours]) => (
+                    {getSortedWorkingDays(settings.workingHours).map(([day, hours]) => (
                       <div key={day} className="flex items-center gap-4">
-                        <div className="w-20 text-sm font-medium text-gray-700 capitalize">
+                        <div className="w-24 text-sm font-medium text-gray-700 capitalize">
                           {day}
                         </div>
                         <div className="flex items-center gap-2">
@@ -191,6 +324,9 @@ export default function Settings() {
                               className="input-field w-32"
                             />
                           </div>
+                        )}
+                        {hours.closed && (
+                          <span className="text-sm text-gray-400 italic">Closed</span>
                         )}
                       </div>
                     ))}
@@ -287,9 +423,22 @@ export default function Settings() {
             )}
 
             <div className="flex justify-end pt-6 border-t border-gray-200">
-              <button onClick={handleSave} className="btn-primary flex items-center gap-2">
-                <Save className="h-4 w-4" />
-                Save Settings
+              <button 
+                onClick={handleSave} 
+                disabled={saving}
+                className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? (
+                  <>
+                    <Loader className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    Save Settings
+                  </>
+                )}
               </button>
             </div>
           </div>
