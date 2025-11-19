@@ -441,6 +441,15 @@ export const settingsAPI = {
     }
   },
 
+  create: async (settingsData) => {
+    try {
+      const response = await apiClient.post('/api/settings', settingsData)
+      return response.data
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to create settings')
+    }
+  },
+
   update: async (settingsData) => {
     try {
       const response = await apiClient.put('/api/settings', settingsData)
