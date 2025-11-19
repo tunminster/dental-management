@@ -181,7 +181,24 @@ export const AuthProvider = ({ children }) => {
   const loadUsers = async () => {
     try {
       const response = await usersAPI.getAll()
-      setUsers(response.data || response)
+      console.log('loadUsers response:', response)
+      console.log('Response type:', typeof response)
+      console.log('Is array:', Array.isArray(response))
+      
+      // Handle different response structures
+      let usersData = []
+      if (Array.isArray(response)) {
+        usersData = response
+      } else if (Array.isArray(response?.data)) {
+        usersData = response.data
+      } else if (Array.isArray(response?.users)) {
+        usersData = response.users
+      } else if (Array.isArray(response?.items)) {
+        usersData = response.items
+      }
+      
+      console.log('Normalized users data:', usersData)
+      setUsers(usersData)
     } catch (error) {
       console.error('Failed to load users:', error)
       setUsers([])
